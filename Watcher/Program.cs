@@ -82,6 +82,7 @@ namespace Watcher
                 Console.Write("Error. ");
                 Console.ResetColor();
                 Console.WriteLine("Invalid input sources!!!" + exception.Message);
+                Console.Beep();
             }
             finally
             {

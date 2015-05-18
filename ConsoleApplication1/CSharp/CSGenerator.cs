@@ -829,6 +829,15 @@ public class " + typeName + generic + " {\n";
                        + " " + (expressionSyntax as BinaryExpressionSyntax).OperatorToken.Text
                        + " " + GenerateExpression((expressionSyntax as BinaryExpressionSyntax).Right, semanticModel);
             }
+            if (expressionSyntax is PostfixUnaryExpressionSyntax)
+            {
+                return GeneratePostfixUnaryExpression(expressionSyntax as PostfixUnaryExpressionSyntax, semanticModel);
+            }
+            if (expressionSyntax is PrefixUnaryExpressionSyntax)
+            {
+                return GeneratePrefixUnaryExpression(expressionSyntax as PrefixUnaryExpressionSyntax, semanticModel);
+                
+            }
             if (expressionSyntax is ParenthesizedExpressionSyntax)
             {
                 return "("
@@ -848,6 +857,30 @@ public class " + typeName + generic + " {\n";
                 return GenerateParenthesizedLambdaExpression(expressionSyntax as ParenthesizedLambdaExpressionSyntax, semanticModel);
             }
             throw new NotImplementedException();
+        }
+
+        private string GeneratePrefixUnaryExpression(PrefixUnaryExpressionSyntax prefixUnaryExpressionSyntax, SemanticModel semanticModel)
+        {
+            AssertOperandIsChangeble(prefixUnaryExpressionSyntax.Operand);
+            return prefixUnaryExpressionSyntax.OperatorToken.Text + GenerateExpression(prefixUnaryExpressionSyntax.Operand, semanticModel);
+        }
+
+        private void AssertOperandIsChangeble(ExpressionSyntax expressionSyntax)
+        {
+            var identifierNameSyntax = expressionSyntax as IdentifierNameSyntax;
+            if (identifierNameSyntax == null)
+            {
+                throw new InvalidOperationException();
+            }
+            string localName = identifierNameSyntax.Identifier.ValueText;
+            AssertIsChangeable(localName);
+        }
+
+        private string GeneratePostfixUnaryExpression(PostfixUnaryExpressionSyntax postfixUnaryExpressionSyntax, SemanticModel semanticModel)
+        {
+            AssertOperandIsChangeble(postfixUnaryExpressionSyntax.Operand);
+            return GenerateExpression(postfixUnaryExpressionSyntax.Operand, semanticModel)
+                + postfixUnaryExpressionSyntax.OperatorToken.Text;
         }
 
         private string GenerateMemberAccessExpression(MemberAccessExpressionSyntax memberAccessExpressionSyntax, SemanticModel semanticModel)
@@ -1077,11 +1110,7 @@ public class " + typeName + generic + " {\n";
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Local)
                 {
                     string localName = (assignmentExpressionSyntax.Left as IdentifierNameSyntax).Identifier.ValueText;
-                    bool isReadOnly = !localName.StartsWith("val");
-                    if (isReadOnly)
-                    {
-                        throw new InvalidOperationException("You can change ONLY local variables with names starting with 'val', other considered unchangeable.");
-                    }
+                    AssertIsChangeable(localName);
                     return localName + "=" + right;
                 }
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Parameter)
@@ -1091,6 +1120,16 @@ public class " + typeName + generic + " {\n";
             }
             //return "";
             throw new NotImplementedException();
+        }
+
+        private static void AssertIsChangeable(string localName)
+        {
+            bool isReadOnly = !localName.StartsWith("val");
+            if (isReadOnly)
+            {
+                throw new InvalidOperationException(
+                    "You can change ONLY local variables with names starting with 'val', other considered unchangeable.");
+            }
         }
 
         private string GenerateMethodCallExpression(string methodName, List<string> parameterExpressions)
