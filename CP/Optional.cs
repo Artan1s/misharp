@@ -1,4 +1,6 @@
-﻿namespace CP
+﻿using System;
+
+namespace CP
 {
     public class Optional<T>
     {
@@ -11,6 +13,11 @@
         {
             HasValue = true;
             Value = value;
+            int valA = 9;
+            Func<int, int> f = (i) => { return 2; };
+            int b = f(2);
+            int valC = 4;
+            valC = 5;
         }
 
         public bool HasValue { get; private set; }

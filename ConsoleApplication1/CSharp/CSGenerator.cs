@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
@@ -130,6 +131,7 @@ namespace ConsoleApplication1.CSharp
         {
             var collector = new CSharpProjectSourcesCollector();
             var sources = collector.CollectProjectSources(projectPath);
+            Directory.Delete(outputPath, true);
             Generate(sources, outputPath);
         }
 
@@ -205,6 +207,17 @@ namespace ConsoleApplication1.CSharp
                 generatedConstructors,
                 generatedProperties,
                 generatedMethods);
+
+            string className = fullyQualifiedNameParts.Last();
+            string path = "";
+            for (int i = 0; i < fullyQualifiedNameParts.Length - 1; i++)
+            {
+                path += fullyQualifiedNameParts[i].ToLower() + "\\";
+            }
+            path += className;
+            path = outputPath + "\\" + path.TrimEnd('\\') + ".java";
+            new FileInfo(path).Directory.Create();
+            File.WriteAllText(path, classSourceCode.MainPart);
         }
 
         private SourceCode GetMethods(SemanticModel semanticModel, HashSet<string> typeReferences, IEnumerable<MethodDeclarationSyntax> methodDeclarations)
@@ -598,7 +611,7 @@ public class " + typeName + generic + " {\n";
         {
             string propertyBackingFieldName = simplePropertyDescription.PropertyName.ToLowerFirstChar();
             string backingField = 
-                "private " + simplePropertyDescription.PropertyType + " " + propertyBackingFieldName + ";\n";
+                "private " + simplePropertyDescription.PropertyType.Text + " " + propertyBackingFieldName + ";\n";
             
             var property = new SourceCode
                            {
@@ -712,7 +725,7 @@ public class " + typeName + generic + " {\n";
             string jArgs = "";
             foreach (var arg in args)
             {
-                jArgs += "final " + arg.Type + " " + arg.Name + ",";
+                jArgs += "final " + arg.Type.Text + " " + arg.Name + ",";
                 if (arg.Type.IsReferenceType)
                 {
                     nullGuardStatements += "\nif (" + arg.Name + " == null) {\n"
@@ -1064,10 +1077,10 @@ public class " + typeName + generic + " {\n";
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Local)
                 {
                     string localName = (assignmentExpressionSyntax.Left as IdentifierNameSyntax).Identifier.ValueText;
-                    bool isReadOnly = localName.StartsWith("val");
+                    bool isReadOnly = !localName.StartsWith("val");
                     if (isReadOnly)
                     {
-                        throw new InvalidOperationException("Don't try to change local variables with names starting with 'val', they considered unchangeable.");
+                        throw new InvalidOperationException("You can change ONLY local variables with names starting with 'val', other considered unchangeable.");
                     }
                     return localName + "=" + right;
                 }

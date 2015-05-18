@@ -16,6 +16,7 @@ namespace CP.Entities
                 var b = new EntityB();
                 var a = b.EntityAProperty;
                 b.EntityAProperty.M();
+                var bb = b.EntityAProperty.EntityBProperty.EntityAProperty.EntityBProperty;
                 a.M();
                 int c = a.DoubleFunc(2);
             }

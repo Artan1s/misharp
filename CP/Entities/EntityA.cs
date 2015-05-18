@@ -36,7 +36,7 @@ namespace CP.Entities
 
         public void M()
         {
-            double g = 9.8;
+            double g = 9.84;
         }
     }
 }
