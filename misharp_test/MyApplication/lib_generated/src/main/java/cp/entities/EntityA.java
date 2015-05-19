@@ -143,9 +143,8 @@ public class EntityA {
                         
                         }, new cp.FuncT<Integer, Integer>() {
                         @Override
-                        public Integer invoke(final Integer i) {    
-                            final int k = 3;
-                            return k;
+                        public Integer invoke(final Integer arg0) {    
+                            return m2(arg0);
                         }
                         
                         });
@@ -153,6 +152,10 @@ public class EntityA {
     
     public void m() {    
         final double g = 9.84;
+    }
+    
+    public int m2(final int k) {    
+        return k;
     }
     
 }

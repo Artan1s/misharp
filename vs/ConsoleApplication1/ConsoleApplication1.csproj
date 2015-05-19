@@ -84,6 +84,7 @@
     <Compile Include="CSharpGenerator.cs" />
     <Compile Include="CSharpProjectSourcesCollector.cs" />
     <Compile Include="CSharp\CSGenerator.cs" />
+    <Compile Include="CSharp\DelegateInfo.cs" />
     <Compile Include="CSharp\IGenericTypeReferenceBuilder.cs" />
     <Compile Include="CSharp\ILiteralGenerator.cs" />
     <Compile Include="JavaCodeGenerator.cs" />

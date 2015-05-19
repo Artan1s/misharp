@@ -987,42 +987,11 @@ public class " + typeName + generic + " {\n";
 
         private string GenerateLambdaExpression(List<ParameterSyntax> parameters, INamedTypeSymbol typeSymbol, CSharpSyntaxNode body, SemanticModel semanticModel)
         {
-            string delegateType = "";
-            TypeReference returnType = null;
+            var delegateInfo = GetDelegateInfo(typeSymbol, semanticModel);
+            string delegateType = delegateInfo.JavaDelegateType;
+            TypeReference returnType = delegateInfo.ReturnType;
 
-            bool isFunc = typeSymbol.Name == "Func";
-            if (isFunc)
-            {
-                delegateType = "Func";
-            }
-            else
-            {
-                delegateType = "Action";
-            }
-
-            var typeParameters = new List<TypeReference>();
-            if (typeSymbol.IsGenericType)
-            {
-                for (int i = 0; i < typeSymbol.TypeArguments.Count(); i++)
-                {
-                    var typeArgument = typeSymbol.TypeArguments[i];
-                    var typeReference = TypeReferenceGenerator.GenerateTypeReference(typeArgument, semanticModel, isInGenericContext: true);
-                    typeParameters.Add(typeReference);
-                    if (!(isFunc && i == 0))
-                    {
-                        delegateType += "T";
-                    }
-                }
-                delegateType = TypeReferenceBuilder.BuildTypeReference(new string[] { "cp", delegateType },
-                    typeParameters);
-            }
-            else
-            {
-                delegateType = TypeReferenceBuilder.BuildTypeReference(new string[] { "cp", delegateType },
-                    new List<TypeReference>());
-            }
-
-            returnType = isFunc ? typeParameters[0] : JavaTypeReferences.Void;
+            bool isFunc = delegateInfo.IsFunc;
 
             var generatedParameters = new List<Var>();
             for (int i = 0; i < parameters.Count; i++)
@@ -1062,6 +1031,11 @@ public class " + typeName + generic + " {\n";
                     statements.Add(generatedStatement);
                 }
             }
+            return BuildLambdaExpression(delegateType, generatedParameters, returnType, statements, semanticModel);
+        }
+
+        private string BuildLambdaExpression(string delegateType, List<Var> generatedParameters, TypeReference returnType, List<string> statements, SemanticModel semanticModel)
+        {
             string method = MethodGenerator.Generate("invoke", returnType, AccessModifier.Public, generatedParameters, statements,
                 false,
                 semanticModel).MainPart;
@@ -1160,7 +1134,91 @@ public class " + typeName + generic + " {\n";
             {
                 return TypeReferenceGenerator.GenerateTypeReference((ITypeSymbol)symbolInfo.Symbol, semanticModel).Text;
             }
+            if (symbolInfo.Symbol.Kind == SymbolKind.Method)
+            {
+                var methodSymbol = symbolInfo.Symbol as IMethodSymbol;
+                var typeSymbol = semanticModel.GetTypeInfo(identifierNameSyntax).ConvertedType as INamedTypeSymbol;
+                var delegateInfo = GetDelegateInfo(typeSymbol, semanticModel);
+                var delegateTypeParameters = delegateInfo.TypeParameters;
+
+                var generatedParameters = new List<Var>();
+                if (delegateInfo.IsFunc)
+                {
+                    delegateTypeParameters.RemoveAt(0);
+                }
+                for (int i = 0; i < delegateTypeParameters.Count; i++)
+                {
+                    generatedParameters.Add(new Var
+                    {
+                        Name = "arg" + i,
+                        Type = delegateTypeParameters[i]
+                    });
+                }
+                string statement = delegateInfo.IsFunc ? "return " : "";
+                statement += methodSymbol.Name.ToLowerFirstChar() + "(";
+                for (int i = 0; i < generatedParameters.Count-1; i++)
+                {
+                    statement += generatedParameters[i].Name + ", ";
+                }
+                if (generatedParameters.Count > 0)
+                {
+                    statement += generatedParameters[generatedParameters.Count - 1].Name;
+                }
+                statement += ");";
+                var statements = new List<string>
+                {
+                    statement
+                };
+                return BuildLambdaExpression(delegateInfo.JavaDelegateType, generatedParameters, delegateInfo.ReturnType, statements, semanticModel);
+            }
             throw new NotImplementedException();
+        }
+
+        private DelegateInfo GetDelegateInfo(INamedTypeSymbol typeSymbol, SemanticModel semanticModel)
+        {
+            string delegateType = "";
+            TypeReference returnType = null;
+
+            bool isFunc = typeSymbol.Name == "Func";
+            if (isFunc)
+            {
+                delegateType = "Func";
+            }
+            else
+            {
+                delegateType = "Action";
+            }
+
+            var typeParameters = new List<TypeReference>();
+            if (typeSymbol.IsGenericType)
+            {
+                for (int i = 0; i < typeSymbol.TypeArguments.Count(); i++)
+                {
+                    var typeArgument = typeSymbol.TypeArguments[i];
+                    var typeReference = TypeReferenceGenerator.GenerateTypeReference(typeArgument, semanticModel, isInGenericContext: true);
+                    typeParameters.Add(typeReference);
+                    if (!(isFunc && i == 0))
+                    {
+                        delegateType += "T";
+                    }
+                }
+                delegateType = TypeReferenceBuilder.BuildTypeReference(new string[] { "cp", delegateType },
+                    typeParameters);
+            }
+            else
+            {
+                delegateType = TypeReferenceBuilder.BuildTypeReference(new string[] { "cp", delegateType },
+                    new List<TypeReference>());
+            }
+
+            returnType = isFunc ? typeParameters[0] : JavaTypeReferences.Void;
+            return new DelegateInfo
+            {
+                ReturnType = returnType,
+                JavaDelegateType = delegateType,
+                TypeParameters = typeParameters,
+                IsFunc = isFunc
+            };
         }
 
         private string GenerateAssignmentExpression(AssignmentExpressionSyntax assignmentExpressionSyntax, SemanticModel semanticModel)
