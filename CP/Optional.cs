@@ -17,7 +17,6 @@ namespace CP
             Func<int, int> f = (i) => { return 2; };
             int valB = f(2);
             int valC = 4;
-            valC = --valB;
         }
 
         public bool HasValue { get; private set; }

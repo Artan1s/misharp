@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "TestClass.h"
+//#include "TestClass.h"
 
 using namespace System;
 

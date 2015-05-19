@@ -131,7 +131,10 @@ namespace ConsoleApplication1.CSharp
         {
             var collector = new CSharpProjectSourcesCollector();
             var sources = collector.CollectProjectSources(projectPath);
-            Directory.Delete(outputPath, true);
+            if (!string.IsNullOrEmpty(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
             Generate(sources, outputPath);
         }
 
@@ -208,16 +211,19 @@ namespace ConsoleApplication1.CSharp
                 generatedProperties,
                 generatedMethods);
 
-            string className = fullyQualifiedNameParts.Last();
-            string path = "";
-            for (int i = 0; i < fullyQualifiedNameParts.Length - 1; i++)
+            if (!string.IsNullOrEmpty(outputPath))
             {
-                path += fullyQualifiedNameParts[i].ToLower() + "\\";
+                string className = fullyQualifiedNameParts.Last();
+                string path = "";
+                for (int i = 0; i < fullyQualifiedNameParts.Length - 1; i++)
+                {
+                    path += fullyQualifiedNameParts[i].ToLower() + "\\";
+                }
+                path += className;
+                path = outputPath + "\\" + path.TrimEnd('\\') + ".java";
+                new FileInfo(path).Directory.Create();
+                File.WriteAllText(path, classSourceCode.MainPart);
             }
-            path += className;
-            path = outputPath + "\\" + path.TrimEnd('\\') + ".java";
-            new FileInfo(path).Directory.Create();
-            File.WriteAllText(path, classSourceCode.MainPart);
         }
 
         private SourceCode GetMethods(SemanticModel semanticModel, HashSet<string> typeReferences, IEnumerable<MethodDeclarationSyntax> methodDeclarations)
@@ -848,6 +854,10 @@ public class " + typeName + generic + " {\n";
             {
                 return GenerateMemberAccessExpression(expressionSyntax as MemberAccessExpressionSyntax, semanticModel);
             }
+            if (expressionSyntax is ElementAccessExpressionSyntax)
+            {
+                return GenerateElementAccessExpression(expressionSyntax as ElementAccessExpressionSyntax, semanticModel);
+            }
             if (expressionSyntax is InvocationExpressionSyntax)
             {
                 return GenerateInvocationExpression(expressionSyntax as InvocationExpressionSyntax, semanticModel);
@@ -857,6 +867,19 @@ public class " + typeName + generic + " {\n";
                 return GenerateParenthesizedLambdaExpression(expressionSyntax as ParenthesizedLambdaExpressionSyntax, semanticModel);
             }
             throw new NotImplementedException();
+        }
+
+        private string GenerateElementAccessExpression(ElementAccessExpressionSyntax elementAccessExpressionSyntax, SemanticModel semanticModel)
+        {
+            string accessingExpression = GenerateExpression(elementAccessExpressionSyntax.Expression, semanticModel);
+            var arguments = elementAccessExpressionSyntax.ArgumentList.Arguments;
+            if (!arguments.Any())
+            {
+                throw new NotImplementedException();
+            }
+            var argument = arguments[0];
+            string generatedArgument = GenerateExpression(argument.Expression, semanticModel);
+            return accessingExpression + ".get(" + generatedArgument + ")";
         }
 
         private string GeneratePrefixUnaryExpression(PrefixUnaryExpressionSyntax prefixUnaryExpressionSyntax, SemanticModel semanticModel)
@@ -1097,26 +1120,40 @@ public class " + typeName + generic + " {\n";
 
         private string GenerateAssignmentExpression(AssignmentExpressionSyntax assignmentExpressionSyntax, SemanticModel semanticModel)
         {
-            string right = GenerateExpression(assignmentExpressionSyntax.Right, semanticModel);
-            if (assignmentExpressionSyntax.Left is IdentifierNameSyntax)
+            string generatedRight = GenerateExpression(assignmentExpressionSyntax.Right, semanticModel);
+            var left = assignmentExpressionSyntax.Left;
+            if (left is IdentifierNameSyntax)
             {
                 var leftSymbolInfo = semanticModel.GetSymbolInfo(assignmentExpressionSyntax.Left);
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Property)
                 {
-                    string propertyName = (assignmentExpressionSyntax.Left as IdentifierNameSyntax).Identifier.ValueText;
+                    string propertyName = (left as IdentifierNameSyntax).Identifier.ValueText;
                     string methodName = "set" + propertyName;
-                    return GenerateMethodCallExpression(methodName, new List<string> { right });
+                    return GenerateMethodCallExpression(methodName, new List<string> { generatedRight });
                 }
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Local)
                 {
-                    string localName = (assignmentExpressionSyntax.Left as IdentifierNameSyntax).Identifier.ValueText;
+                    string localName = (left as IdentifierNameSyntax).Identifier.ValueText;
                     AssertIsChangeable(localName);
-                    return localName + "=" + right;
+                    return localName + "=" + generatedRight;
                 }
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Parameter)
                 {
                     throw new InvalidOperationException("Don't try to change parameters. All parameters considered unchangeable.");
                 }
+            }
+            if (left is ElementAccessExpressionSyntax)
+            {
+                var elementAccessExpressionSyntax = left as ElementAccessExpressionSyntax;
+                string accessingExpression = GenerateExpression(elementAccessExpressionSyntax.Expression, semanticModel);
+                var arguments = elementAccessExpressionSyntax.ArgumentList.Arguments;
+                if (!arguments.Any())
+                {
+                    throw new NotImplementedException();
+                }
+                var argument = arguments[0];
+                string generatedArgument = GenerateExpression(argument.Expression, semanticModel);
+                return accessingExpression + ".set(" + generatedArgument + ", " + generatedRight + ")";
             }
             //return "";
             throw new NotImplementedException();

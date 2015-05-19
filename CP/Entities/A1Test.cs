@@ -19,6 +19,10 @@ namespace CP.Entities
                 var bb = b.EntityAProperty.EntityBProperty.EntityAProperty.EntityBProperty;
                 a.M();
                 int c = a.DoubleFunc(2);
+                var list = new Seq<int>();
+                int k = list[2];
+                list[k] = 3;
+                list.Add(1);
             }
             else if (valI > 10)
             {

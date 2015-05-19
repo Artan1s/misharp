@@ -18,5 +18,10 @@ namespace CP
             get { return internalCollection[index]; }
             set { internalCollection[index] = value; }
         }
+
+        public void Add(T item)
+        {
+            internalCollection.Add(item);
+        }
     }
 }
