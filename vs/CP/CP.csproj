@@ -33,6 +33,7 @@
     <Compile Include="Core\NoImplementationAttribute.cs" />
     <Compile Include="Core\NativeImplementationAttribute.cs" />
     <Compile Include="Core\NativeImplementationException.cs" />
+    <Compile Include="Entities\A01.cs" />
     <Compile Include="Entities\A1Test.cs" />
     <Compile Include="Optional.cs" />
     <Compile Include="Core\StringUtils.cs" />

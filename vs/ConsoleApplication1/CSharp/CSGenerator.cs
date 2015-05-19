@@ -250,6 +250,7 @@ namespace ConsoleApplication1.CSharp
 
                 }
                 var accessModifier = GetAccessModifier(methodDeclaration.Modifiers.ToList());
+                bool isStatic = methodDeclaration.Modifiers.ToList().Any(token => token.Text == "static");
                 var statements = new List<string>();
                 foreach (var statement in methodDeclaration.Body.Statements)
                 {
@@ -258,7 +259,9 @@ namespace ConsoleApplication1.CSharp
 
                 }
                 var generatedMethod = MethodGenerator.Generate(identifier, returnTypeReference, accessModifier, parameters,
-                    statements, semanticModel);
+                    statements,
+                    false, 
+                    semanticModel);
                 generatedMethods.MainPart += "\n" + generatedMethod.MainPart;
             }
             return generatedMethods;
@@ -632,7 +635,9 @@ public class " + typeName + generic + " {\n";
                 var getter = MethodGenerator.Generate(
                     "get" + simplePropertyDescription.PropertyName, simplePropertyDescription.PropertyType, 
                     simplePropertyDescription.GetAccessModifier.Value,
-                    new List<Var>(), getterStatements, semanticModel);
+                    new List<Var>(), getterStatements,
+                    false,
+                    semanticModel);
                 property.MainPart += getter.MainPart + "\n";
             }
             if (simplePropertyDescription.SetAccessModifier.HasValue)
@@ -648,7 +653,9 @@ public class " + typeName + generic + " {\n";
                 var setter = MethodGenerator.Generate(
                     "set" + simplePropertyDescription.PropertyName, JavaTypeReferences.Void,
                     simplePropertyDescription.SetAccessModifier.Value,
-                    setterArgs, setterStatements, semanticModel);
+                    setterArgs, setterStatements,
+                    false, 
+                    semanticModel);
                 property.MainPart += setter.MainPart + "\n";
             }
             return property;
@@ -666,10 +673,15 @@ public class " + typeName + generic + " {\n";
         public SourceCode Generate(string name, TypeReference returnType,
             AccessModifier accessModifier,
             IEnumerable<Var> args, List<string> statements,
+            bool isStatic,
             SemanticModel semanticModel)
         {
             string jname = name.ToLowerFirstChar();
             string jAccessModifier = accessModifier == AccessModifier.Public ? "public" : "private";
+            if (isStatic)
+            {
+                jAccessModifier += " static";
+            }
 
             string nullGuardStatements = "";
 
@@ -708,6 +720,7 @@ public class " + typeName + generic + " {\n";
         SourceCode Generate(string name, TypeReference returnType,
             AccessModifier accessModifier,
             IEnumerable<Var> args, List<string> statements,
+            bool isStatic,
             SemanticModel semanticModel);
     }
 
@@ -1046,6 +1059,7 @@ public class " + typeName + generic + " {\n";
                 }
             }
             string method = MethodGenerator.Generate("invoke", returnType, AccessModifier.Public, generatedParameters, statements,
+                false,
                 semanticModel).MainPart;
             string generatedExpression = string.Format(@"new {0}() {{
                 @Override
@@ -1079,6 +1093,10 @@ public class " + typeName + generic + " {\n";
                 string memberName = memberAccessExpression.Name.Identifier.ValueText;
                 var symbolInfo = semanticModel.GetSymbolInfo(memberAccessExpression);
                 string ownerExpression = GenerateExpression(memberAccessExpression.Expression, semanticModel);
+                if (symbolInfo.Symbol is IMethodSymbol && (symbolInfo.Symbol as IMethodSymbol).IsExtensionMethod)
+                {
+                    throw new NotImplementedException();
+                }
                 if (symbolInfo.Symbol.Kind == SymbolKind.Method)
                 {
                     return ownerExpression + "." + GenerateMethodCallExpression(memberName, parameterExpressions);
