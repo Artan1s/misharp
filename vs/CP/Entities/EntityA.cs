@@ -26,8 +26,8 @@ namespace CP.Entities
 
         public string Method1(int intParam, Action a1, Action<int> a2, Func<int> f1, Func<int, int> f2)
         {
-            return Method1(intParam, () => M(), (i) => M(), () => 1, 
-                (i) => 
+            return Method1(intParam, () => M(), i => M(), () => 1, 
+                i => 
                 { 
                     int k = 3;
                     return k;

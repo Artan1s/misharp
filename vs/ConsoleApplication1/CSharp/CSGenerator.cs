@@ -883,6 +883,10 @@ public class " + typeName + generic + " {\n";
             {
                 return GenerateParenthesizedLambdaExpression(expressionSyntax as ParenthesizedLambdaExpressionSyntax, semanticModel);
             }
+            if (expressionSyntax is SimpleLambdaExpressionSyntax)
+            {
+                return GenerateSimpleLambdaExpression(expressionSyntax as SimpleLambdaExpressionSyntax, semanticModel);
+            }
             throw new NotImplementedException();
         }
 
@@ -981,15 +985,12 @@ public class " + typeName + generic + " {\n";
             return false;
         }
 
-        private string GenerateParenthesizedLambdaExpression(ParenthesizedLambdaExpressionSyntax parenthesizedLambdaExpressionSyntax, SemanticModel semanticModel)
+        private string GenerateLambdaExpression(List<ParameterSyntax> parameters, INamedTypeSymbol typeSymbol, CSharpSyntaxNode body, SemanticModel semanticModel)
         {
-            var parameters = parenthesizedLambdaExpressionSyntax.ParameterList.Parameters;
-            var typeInfo = semanticModel.GetTypeInfo(parenthesizedLambdaExpressionSyntax);
-            var type = (INamedTypeSymbol)typeInfo.ConvertedType;
             string delegateType = "";
             TypeReference returnType = null;
 
-            bool isFunc = type.Name == "Func";
+            bool isFunc = typeSymbol.Name == "Func";
             if (isFunc)
             {
                 delegateType = "Func";
@@ -1000,11 +1001,11 @@ public class " + typeName + generic + " {\n";
             }
 
             var typeParameters = new List<TypeReference>();
-            if (type.IsGenericType)
+            if (typeSymbol.IsGenericType)
             {
-                for (int i = 0; i < type.TypeArguments.Count(); i++)
+                for (int i = 0; i < typeSymbol.TypeArguments.Count(); i++)
                 {
-                    var typeArgument = type.TypeArguments[i];
+                    var typeArgument = typeSymbol.TypeArguments[i];
                     var typeReference = TypeReferenceGenerator.GenerateTypeReference(typeArgument, semanticModel, isInGenericContext: true);
                     typeParameters.Add(typeReference);
                     if (!(isFunc && i == 0))
@@ -1027,7 +1028,7 @@ public class " + typeName + generic + " {\n";
             for (int i = 0; i < parameters.Count; i++)
             {
                 var parameter = parameters[i];
-                var typeArgumentForParameter = isFunc ? type.TypeArguments[i + 1] : type.TypeArguments[i];
+                var typeArgumentForParameter = isFunc ? typeSymbol.TypeArguments[i + 1] : typeSymbol.TypeArguments[i];
                 var typeReference = TypeReferenceGenerator.GenerateTypeReference(typeArgumentForParameter, semanticModel, isInGenericContext: true);
                 generatedParameters.Add(new Var
                 {
@@ -1037,7 +1038,6 @@ public class " + typeName + generic + " {\n";
 
             }
             var statements = new List<string>();
-            var body = parenthesizedLambdaExpressionSyntax.Body;
             if (body is InvocationExpressionSyntax)
             {
                 string generatedInvocationExpression = GenerateInvocationExpression(body as InvocationExpressionSyntax,
@@ -1070,6 +1070,22 @@ public class " + typeName + generic + " {\n";
 {1}
                 }}", delegateType, method.AddTab(4));
             return generatedExpression;
+        }
+
+        private string GenerateSimpleLambdaExpression(SimpleLambdaExpressionSyntax simpleLambdaExpressionSyntax, SemanticModel semanticModel)
+        {
+            var parameters = new List<ParameterSyntax> {simpleLambdaExpressionSyntax.Parameter};
+            var typeInfo = semanticModel.GetTypeInfo(simpleLambdaExpressionSyntax);
+            var type = (INamedTypeSymbol)typeInfo.ConvertedType;
+            return GenerateLambdaExpression(parameters, type, simpleLambdaExpressionSyntax.Body, semanticModel);   
+        }
+
+        private string GenerateParenthesizedLambdaExpression(ParenthesizedLambdaExpressionSyntax parenthesizedLambdaExpressionSyntax, SemanticModel semanticModel)
+        {
+            var parameters = parenthesizedLambdaExpressionSyntax.ParameterList.Parameters.ToList();
+            var typeInfo = semanticModel.GetTypeInfo(parenthesizedLambdaExpressionSyntax);
+            var type = (INamedTypeSymbol)typeInfo.ConvertedType;
+            return GenerateLambdaExpression(parameters, type, parenthesizedLambdaExpressionSyntax.Body, semanticModel);            
         }
 
         private string GenerateInvocationExpression(InvocationExpressionSyntax invocationExpressionSyntax, SemanticModel semanticModel)
