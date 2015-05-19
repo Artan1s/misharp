@@ -14,7 +14,8 @@ namespace CP.Entities
             if (condition && valI > 3)
             {
                 string str = "privet";
-                string str2 = str.AddTab();
+                string str2 = A01.AddTab(str);
+                string str3 = str.AddTabExt(2);
                 var b = new EntityB();
                 var a = b.EntityAProperty;
                 b.EntityAProperty.M();

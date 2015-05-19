@@ -15,7 +15,7 @@ public class A1Test {
         if (condition && valI > 3) {
             final String str = "privet";
             final String str2 = cp.entities.A01.addTab(str);
-            final String str3 = cp.entities.A01.addTabExt(str, 2);
+            final String str3 = cp.entities.A01.addTabExt(str);
             final cp.entities.EntityB b = new cp.entities.EntityB();
             final cp.entities.EntityA a = b.getEntityAProperty();
             b.getEntityAProperty().m();

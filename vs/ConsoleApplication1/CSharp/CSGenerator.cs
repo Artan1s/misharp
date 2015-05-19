@@ -133,7 +133,11 @@ namespace ConsoleApplication1.CSharp
             var sources = collector.CollectProjectSources(projectPath);
             if (!string.IsNullOrEmpty(outputPath))
             {
-                Directory.Delete(outputPath, true);
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+                Directory.CreateDirectory(outputPath);
             }
             Generate(sources, outputPath);
         }
@@ -260,7 +264,7 @@ namespace ConsoleApplication1.CSharp
                 }
                 var generatedMethod = MethodGenerator.Generate(identifier, returnTypeReference, accessModifier, parameters,
                     statements,
-                    false, 
+                    isStatic, 
                     semanticModel);
                 generatedMethods.MainPart += "\n" + generatedMethod.MainPart;
             }
@@ -443,7 +447,7 @@ public class " + typeName + generic + " {\n";
 
     public interface ITypeReferenceGenerator
     {
-        TypeReference GenerateTypeReference(ITypeSymbol typeSyntax, SemanticModel semanticModel,
+        TypeReference GenerateTypeReference(ITypeSymbol typeSymbol, SemanticModel semanticModel,
             bool isInGenericContext = false);
 
         TypeReference GenerateTypeReference(TypeSyntax typeSyntax, SemanticModel semanticModel,
@@ -1095,7 +1099,10 @@ public class " + typeName + generic + " {\n";
                 string ownerExpression = GenerateExpression(memberAccessExpression.Expression, semanticModel);
                 if (symbolInfo.Symbol is IMethodSymbol && (symbolInfo.Symbol as IMethodSymbol).IsExtensionMethod)
                 {
-                    throw new NotImplementedException();
+                    var containingType = (symbolInfo.Symbol as IMethodSymbol).ContainingType;
+                    string containingTypeReference = TypeReferenceGenerator.GenerateTypeReference(containingType, semanticModel).Text;
+                    parameterExpressions.Insert(0, ownerExpression);
+                    return containingTypeReference + "." + GenerateMethodCallExpression(memberName, parameterExpressions);
                 }
                 if (symbolInfo.Symbol.Kind == SymbolKind.Method)
                 {
@@ -1132,6 +1139,10 @@ public class " + typeName + generic + " {\n";
             if (symbolInfo.Symbol.Kind == SymbolKind.Local)
             {
                 return identifierNameSyntax.Identifier.ValueText;
+            }
+            if (symbolInfo.Symbol.Kind == SymbolKind.NamedType)
+            {
+                return TypeReferenceGenerator.GenerateTypeReference((ITypeSymbol)symbolInfo.Symbol, semanticModel).Text;
             }
             throw new NotImplementedException();
         }

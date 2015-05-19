@@ -24,7 +24,7 @@ namespace ConsoleApplication1
     {
         private static SemanticModel semanticModel;
 
-        private static string cpDirPath = @"D:\MiSharpProject\vs\CP";
+        private static string cpDirPath = @"D:\misharp\vs\CP";
         private static DirectoryInfo cpDir = new DirectoryInfo(cpDirPath);
 
         private static DirectoryInfo cpCSharpOutputDirectory =
