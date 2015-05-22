@@ -142,12 +142,14 @@ namespace ConsoleApplication1.CSharp
             Generate(sources, outputPath);
         }
 
-        private void Generate(IEnumerable<string> sources, string outputPath)
+        private void Generate(IEnumerable<SourceFile> sources, string outputPath)
         {
             var syntaxTrees = new List<SyntaxTree>();
             foreach (var source in sources)
             {
-                SyntaxTree tree = CSharpSyntaxTree.ParseText(source);
+                SyntaxTree tree = SyntaxFactory.ParseSyntaxTree(source.Text, path: source.Path);
+
+
                 syntaxTrees.Add(tree);
             }
 
@@ -160,7 +162,7 @@ namespace ConsoleApplication1.CSharp
 
             foreach (var syntaxTree in syntaxTrees)
             {
-                var semanticModel = compilation.GetSemanticModel(syntaxTree);
+                var semanticModel = compilation.GetSemanticModel(syntaxTree, false);
                 Generate(syntaxTree, semanticModel, outputPath);
             }
         }
@@ -916,8 +918,7 @@ public class " + typeName + generic + " {\n";
             {
                 throw new InvalidOperationException();
             }
-            string localName = identifierNameSyntax.Identifier.ValueText;
-            AssertIsChangeable(localName);
+            AssertIsChangeable(identifierNameSyntax.Identifier);
         }
 
         private string GeneratePostfixUnaryExpression(PostfixUnaryExpressionSyntax postfixUnaryExpressionSyntax, SemanticModel semanticModel)
@@ -1237,7 +1238,7 @@ public class " + typeName + generic + " {\n";
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Local)
                 {
                     string localName = (left as IdentifierNameSyntax).Identifier.ValueText;
-                    AssertIsChangeable(localName);
+                    AssertIsChangeable((left as IdentifierNameSyntax).Identifier);
                     return localName + "=" + generatedRight;
                 }
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Parameter)
@@ -1262,13 +1263,15 @@ public class " + typeName + generic + " {\n";
             throw new NotImplementedException();
         }
 
-        private static void AssertIsChangeable(string localName)
+        private static void AssertIsChangeable(SyntaxToken localIdentifier)
         {
+            string localName = localIdentifier.ValueText;
             bool isReadOnly = !localName.StartsWith("val");
             if (isReadOnly)
             {
-                throw new InvalidOperationException(
-                    "You can change ONLY local variables with names starting with 'val', other considered unchangeable.");
+                throw ExceptionHelper.CreateInvalidOperationExceptionWithSourceData(
+                    "You can change ONLY local variables with names starting with 'val', other considered unchangeable.",
+                    localIdentifier);
             }
         }
 

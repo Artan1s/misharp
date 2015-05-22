@@ -6,15 +6,15 @@ namespace ConsoleApplication1
 {
     public class CSharpProjectSourcesCollector
     {
-        public List<string> CollectProjectSources(string projectPath)
+        public List<SourceFile> CollectProjectSources(string projectPath)
         {
             var projectDirectory = new DirectoryInfo(projectPath);
             return CollectProjectSources(projectDirectory);
         }
 
-        private List<string> CollectProjectSources(DirectoryInfo projectDirectory)
+        private List<SourceFile> CollectProjectSources(DirectoryInfo projectDirectory)
         {
-            var sources = new List<string>();
+            var sources = new List<SourceFile>();
             foreach (var directory in projectDirectory.EnumerateDirectories())
             {
                 if (directory.Name.ToLower() == "bin"
@@ -27,22 +27,30 @@ namespace ConsoleApplication1
             }
             foreach (var csFile in projectDirectory.EnumerateFiles("*.cs"))
             {
-                string source = csFile.OpenRead().ReadToEnd();
+                var source = new SourceFile
+                {
+                    Text = csFile.OpenRead().ReadToEnd(),
+                    Path = csFile.FullName
+                };
                 sources.Add(source);
             }
             return sources;
         }
 
-        private List<string> CollectSources(DirectoryInfo sourcesDirectory)
+        private List<SourceFile> CollectSources(DirectoryInfo sourcesDirectory)
         {
-            var sources = new List<string>();
+            var sources = new List<SourceFile>();
             foreach (var directory in sourcesDirectory.EnumerateDirectories())
             {
                 sources.AddRange(CollectSources(directory));
             }
             foreach (var csFile in sourcesDirectory.EnumerateFiles("*.cs"))
             {
-                string source = csFile.OpenRead().ReadToEnd();
+                var source = new SourceFile
+                {
+                    Text = csFile.OpenRead().ReadToEnd(),
+                    Path = csFile.FullName
+                };
                 sources.Add(source);
             }
             return sources;
