@@ -54,7 +54,13 @@ namespace ConsoleApplication1
 //                ParseMethod(method);
 //            }
 
-            (new JavaGenerator()).Generate(cpDirPath, "");
+            //local
+            //(new JavaGenerator()).Generate(cpDirPath, 
+            //    "D:\\Android\\payment_system_one_click_payment\\paymentsystem\\paymentsystemcore\\src\\main\\java");
+
+            //belqi
+            (new JavaGenerator()).Generate("D:\\WindowsPhone\\Belqi\\Belqi\\PaymentSystemCore\\BuisnessEntities",
+                "D:\\Android\\payment_system_one_click_payment\\paymentsystem\\paymentsystemcore\\src\\main\\java");
             //GenerateCpCSharp();
 
             //GenerateCpJava();

@@ -11,8 +11,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VSIXProject1", "VSIXProject
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MisharpPortableClassLibrary", "MisharpPortableClassLibrary\MisharpPortableClassLibrary.csproj", "{1F0D5589-B76C-4717-B9EC-55D87BC6BED4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleApplication1", "D:\MiSharpProject\vs\ConsoleApplication1\ConsoleApplication1.csproj", "{BFBB63BB-86A4-4158-9BD9-D32FFF1F5426}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -31,8 +29,6 @@ Global
 		{B12A39DC-6059-47A6-B927-3A0E94B127E0}.Release|Any CPU.Build.0 = Release|Any CPU
 		{1F0D5589-B76C-4717-B9EC-55D87BC6BED4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{1F0D5589-B76C-4717-B9EC-55D87BC6BED4}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{BFBB63BB-86A4-4158-9BD9-D32FFF1F5426}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{BFBB63BB-86A4-4158-9BD9-D32FFF1F5426}.Release|Any CPU.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

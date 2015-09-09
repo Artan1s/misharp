@@ -36,9 +36,7 @@
   <ItemGroup>
     <!-- A reference to the entire .NET Framework is automatically included -->
     <Content Include="MiSharp\ClassLibrary1.dll" />
-    <Content Include="MiSharp\ClassLibrary1.pdb" />
     <Content Include="MiSharp\ConsoleApplication1.exe" />
-    <Content Include="MiSharp\ConsoleApplication1.pdb" />
     <Content Include="MiSharp\Microsoft.Build.Framework.dll" />
     <Content Include="MiSharp\Microsoft.Build.Utilities.v4.0.dll" />
     <Content Include="MiSharp\Microsoft.CodeAnalysis.CSharp.dll" />

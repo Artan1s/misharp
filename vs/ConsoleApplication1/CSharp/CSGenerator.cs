@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
@@ -175,6 +176,21 @@ namespace ConsoleApplication1.CSharp
             {
                 Generate(classDeclaration, semanticModel, outputPath);
             }
+            var enumDeclarations = root.DescendantNodes().OfType<EnumDeclarationSyntax>();
+            foreach (var enumDeclaration in enumDeclarations)
+            {
+                Generate(enumDeclaration, semanticModel, outputPath);
+            }
+        }
+
+        private void Generate(EnumDeclarationSyntax enumDeclaration, SemanticModel semanticModel, string outputPath)
+        {
+            INamedTypeSymbol typeInfo = semanticModel.GetDeclaredSymbol(enumDeclaration);
+            var fullyQualifiedNameParts = SyntaxTreeHelper.GetFullyQualifiedNameParts(typeInfo);
+            
+            var sourceCode = TypeBuilder.BuildEnum(semanticModel, fullyQualifiedNameParts, enumDeclaration.Members);
+
+            WriteToOutputIfPathPresent(outputPath, fullyQualifiedNameParts, sourceCode.MainPart);
         }
 
         private void Generate(ClassDeclarationSyntax classDeclaration, SemanticModel semanticModel, string outputPath)
@@ -212,11 +228,18 @@ namespace ConsoleApplication1.CSharp
             var methodDeclarations = classDeclaration.DescendantNodes().OfType<MethodDeclarationSyntax>();
             var generatedMethods = GetMethods(semanticModel, typeReferences, methodDeclarations);
 
-            var classSourceCode = TypeBuilder.BuildType(fullyQualifiedNameParts, genericTypeParameters,
+            var classSourceCode = TypeBuilder.BuildType(semanticModel, 
+                fullyQualifiedNameParts, genericTypeParameters,
+                typeInfo.BaseType,
                 generatedConstructors,
                 generatedProperties,
                 generatedMethods);
 
+            WriteToOutputIfPathPresent(outputPath, fullyQualifiedNameParts, classSourceCode.MainPart);
+        }
+
+        private void WriteToOutputIfPathPresent(string outputPath, string[] fullyQualifiedNameParts, string sourceCodeText)
+        {
             if (!string.IsNullOrEmpty(outputPath))
             {
                 string className = fullyQualifiedNameParts.Last();
@@ -228,7 +251,7 @@ namespace ConsoleApplication1.CSharp
                 path += className;
                 path = outputPath + "\\" + path.TrimEnd('\\') + ".java";
                 new FileInfo(path).Directory.Create();
-                File.WriteAllText(path, classSourceCode.MainPart);
+                File.WriteAllText(path, sourceCodeText);
             }
         }
 
@@ -393,21 +416,20 @@ namespace ConsoleApplication1.CSharp
 
     public interface ITypeBuilder
     {
-        SourceCode BuildType(string[] fullyQualifiedNameParts, IEnumerable<ITypeParameterSymbol> genericParameters,
-            SourceCode generatedConstructors, SourceCode properties, SourceCode methods);
+        SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts, IEnumerable<ITypeParameterSymbol> genericParameters, 
+            INamedTypeSymbol baseType, SourceCode generatedConstructors, SourceCode properties, SourceCode methods);
+
+        SourceCode BuildEnum(SemanticModel semanticModel, string[] fullyQualifiedNameParts, SeparatedSyntaxList<EnumMemberDeclarationSyntax> members);
     }
 
     public class JavaTypeBuilder : ITypeBuilder
     {
-        public SourceCode BuildType(string[] fullyQualifiedNameParts, IEnumerable<ITypeParameterSymbol> genericParameters,
-            SourceCode constructors, SourceCode properties, SourceCode methods)
+        protected JavaTypeReferenceGenerator TypeReferenceGenerator { get { return new JavaTypeReferenceGenerator(); } }
+
+        public SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts, IEnumerable<ITypeParameterSymbol> genericParameters, 
+            INamedTypeSymbol baseType, SourceCode constructors, SourceCode properties, SourceCode methods)
         {
-            string packageName = "";
-            for (int i = 0; i < fullyQualifiedNameParts.Length - 2; i++)
-            {
-                packageName += fullyQualifiedNameParts[i].ToLower() + ".";
-            }
-            packageName += fullyQualifiedNameParts[fullyQualifiedNameParts.Length - 2].ToLower();
+            string packageName = GetPackageName(fullyQualifiedNameParts);
             string generic = "";
             var genericParametersList = genericParameters as IList<ITypeParameterSymbol> ?? genericParameters.ToList();
             if (genericParametersList.Any())
@@ -420,10 +442,22 @@ namespace ConsoleApplication1.CSharp
                 generic += genericParametersList.Last().Name + ">";
             }
             string typeName = fullyQualifiedNameParts.Last();
+
+            string baseTypeReferenceText = null;
+            if (baseType != null)
+            {
+                baseTypeReferenceText = TypeReferenceGenerator.GenerateTypeReference(baseType, semanticModel).Text;
+            }
+
             string code =
 @"package " + packageName + @";
 
-public class " + typeName + generic + " {\n";
+public class " + typeName + generic;
+            if (!string.IsNullOrEmpty(baseTypeReferenceText))
+            {
+                code += " extends " + baseTypeReferenceText;
+            }
+            code += " {\n";
             code += constructors.MainPart.AddTab() + "\n";
             code += properties.MainPart.AddTab() + "\n";
             code += methods.MainPart.AddTab();
@@ -432,6 +466,42 @@ public class " + typeName + generic + " {\n";
                    {
                        MainPart = code
                    };
+        }
+
+        public SourceCode BuildEnum(SemanticModel semanticModel, string[] fullyQualifiedNameParts, SeparatedSyntaxList<EnumMemberDeclarationSyntax> members)
+        {
+            string packageName = GetPackageName(fullyQualifiedNameParts);
+            string typeName = fullyQualifiedNameParts.Last();
+
+            string membersPart = "";
+
+            foreach (var member in members)
+            {
+                membersPart += member.Identifier.ValueText.ToUnderscoreCase().ToUpper() + ", ";
+            }
+
+            string code =
+                @"package " + packageName + @";
+
+public enum " + typeName;
+            code += " {\n";
+            code += "    " + membersPart;
+            code += "\n}";
+            return new SourceCode
+            {
+                MainPart = code
+            };
+        }
+
+        private string GetPackageName(string[] fullyQualifiedNameParts)
+        {
+            string packageName = "";
+            for (int i = 0; i < fullyQualifiedNameParts.Length - 2; i++)
+            {
+                packageName += fullyQualifiedNameParts[i].ToLower() + ".";
+            }
+            packageName += fullyQualifiedNameParts[fullyQualifiedNameParts.Length - 2].ToLower();
+            return packageName;
         }
     }
 
@@ -479,6 +549,18 @@ public class " + typeName + generic + " {\n";
             }
             var namedTypeSymbol = (INamedTypeSymbol) typeSymbol;
             string fullyQualifiedName = SyntaxTreeHelper.GetFullyQualifiedName(namedTypeSymbol);
+            var fullyQualifiedPropertyTypeNameParts = SyntaxTreeHelper.GetFullyQualifiedNameParts(namedTypeSymbol);
+
+            var typeParameters = new List<TypeReference>();
+            if (namedTypeSymbol.IsGenericType)
+            {
+                foreach (var typeArgument in namedTypeSymbol.TypeArguments)
+                {
+                    var typeReference = GenerateTypeReference(typeArgument, semanticModel, isInGenericContext: true);
+                    typeParameters.Add(typeReference);
+                }
+            }
+
             if (PredefinedTypes.IsPredefined(fullyQualifiedName))
             {
                 return new TypeReference
@@ -489,23 +571,27 @@ public class " + typeName + generic + " {\n";
                     IsReferenceType = typeSymbol.IsReferenceType
                 };
             }
+            if (IsCustomImplementedType(fullyQualifiedName))
+            {
+                if (namedTypeSymbol.IsGenericType)
+                {
+                }
+                string typeReferenceText = "by.misharp." + (namedTypeSymbol.IsGenericType 
+                    ? TypeReferenceBuilder.BuildTypeReference(fullyQualifiedPropertyTypeNameParts, typeParameters)
+                    : TypeReferenceBuilder.BuildTypeReference(fullyQualifiedPropertyTypeNameParts));
+                return new TypeReference
+                {
+                    Text = typeReferenceText,
+                    IsReferenceType = typeSymbol.IsReferenceType
+                };
+            }
             if (IsDelegateType(namedTypeSymbol))
             {
                 return BuildDelegateReference(namedTypeSymbol, semanticModel);
             }
-            
-
-
-            var fullyQualifiedPropertyTypeNameParts = SyntaxTreeHelper.GetFullyQualifiedNameParts(namedTypeSymbol);
 
             if (namedTypeSymbol.IsGenericType)
             {
-                var typeParameters = new List<TypeReference>();
-                foreach (var typeArgument in namedTypeSymbol.TypeArguments)
-                {
-                    var typeReference = GenerateTypeReference(typeArgument, semanticModel, isInGenericContext: true);
-                    typeParameters.Add(typeReference);
-                }
                 string typeReferenceText = TypeReferenceBuilder.BuildTypeReference(fullyQualifiedPropertyTypeNameParts, typeParameters);
                 return new TypeReference
                 {
@@ -523,6 +609,19 @@ public class " + typeName + generic + " {\n";
                     IsReferenceType = typeSymbol.IsReferenceType
                 };
             }
+        }
+
+        private bool IsCustomImplementedType(string fullyQualifiedName)
+        {
+            if (fullyQualifiedName == "System.Collections.Generic.List")
+            {
+                return true;
+            }
+            if (fullyQualifiedName == "System.Text.StringBuilder")
+            {
+                return true;
+            }
+            return false;
         }
 
         public TypeReference GenerateTypeReference(TypeSyntax typeSyntax, SemanticModel semanticModel, bool isInGenericContext = false)
@@ -695,12 +794,14 @@ public class " + typeName + generic + " {\n";
             foreach (var arg in args)
             {
                 jArgs += "final " + arg.Type.Text + " " + arg.Name + ", ";
-                if (arg.Type.IsReferenceType)
-                {
-                    nullGuardStatements += "\nif (" + arg.Name + " == null) {\n"
-                                           + "    throw new IllegalArgumentException(\"" + arg.Name + "\");\n"
-                                           + "}";
-                }
+
+                // todo: handle enabling/disabling null guard
+                //if (arg.Type.IsReferenceType)
+                //{
+                //    nullGuardStatements += "\nif (" + arg.Name + " == null) {\n"
+                //                           + "    throw new IllegalArgumentException(\"" + arg.Name + "\");\n"
+                //                           + "}";
+                //}
             }
             jArgs = jArgs.Trim(new[] { ' ', ',' });
 
@@ -889,7 +990,26 @@ public class " + typeName + generic + " {\n";
             {
                 return GenerateSimpleLambdaExpression(expressionSyntax as SimpleLambdaExpressionSyntax, semanticModel);
             }
+            if (expressionSyntax is CastExpressionSyntax)
+            {
+                return GenerateCastExpression(expressionSyntax as CastExpressionSyntax, semanticModel);
+            }
+            if (expressionSyntax is ThisExpressionSyntax)
+            {
+                return GenerateThisExpression(expressionSyntax as ThisExpressionSyntax, semanticModel);
+            }
             throw new NotImplementedException();
+        }
+
+        private string GenerateThisExpression(ThisExpressionSyntax thisExpressionSyntax, SemanticModel semanticModel)
+        {
+            return "this";
+        }
+
+        private string GenerateCastExpression(CastExpressionSyntax castExpressionSyntax, SemanticModel semanticModel)
+        {
+            var typeReference = TypeReferenceGenerator.GenerateTypeReference(castExpressionSyntax.Type, semanticModel);
+            return "(" + typeReference.Text + ") " + GenerateExpression(castExpressionSyntax.Expression, semanticModel);
         }
 
         private string GenerateElementAccessExpression(ElementAccessExpressionSyntax elementAccessExpressionSyntax, SemanticModel semanticModel)
@@ -1072,6 +1192,7 @@ public class " + typeName + generic + " {\n";
                 parameterExpressions.Add(parameterExpression);
             }
             var expression = invocationExpressionSyntax.Expression;
+            var symbolInfo = semanticModel.GetSymbolInfo(expression);
             if (expression is IdentifierNameSyntax)
             {
                 var identifierNameExpression = expression as IdentifierNameSyntax;
@@ -1080,13 +1201,15 @@ public class " + typeName + generic + " {\n";
                 {
                     return identifierNameExpression.Identifier.ValueText + "." + GenerateMethodCallExpression("invoke", parameterExpressions);
                 }
-                return GenerateMethodCallExpression(invocationExpressionSyntax.Expression.GetText().ToString().Trim(), parameterExpressions);
+                string containingTypeFullName = SyntaxTreeHelper.GetFullyQualifiedName(symbolInfo.Symbol.ContainingType);
+                string methodName = OverwriteMethodNameIfNeeded(invocationExpressionSyntax.Expression.GetText().ToString().Trim(), containingTypeFullName); 
+                return GenerateMethodCallExpression(methodName, parameterExpressions);
             }
             if (expression is MemberAccessExpressionSyntax)
             {
                 var memberAccessExpression = expression as MemberAccessExpressionSyntax;
                 string memberName = memberAccessExpression.Name.Identifier.ValueText;
-                var symbolInfo = semanticModel.GetSymbolInfo(memberAccessExpression);
+                
                 string ownerExpression = GenerateExpression(memberAccessExpression.Expression, semanticModel);
                 if (symbolInfo.Symbol is IMethodSymbol && (symbolInfo.Symbol as IMethodSymbol).IsExtensionMethod)
                 {
@@ -1096,8 +1219,10 @@ public class " + typeName + generic + " {\n";
                     return containingTypeReference + "." + GenerateMethodCallExpression(memberName, parameterExpressions);
                 }
                 if (symbolInfo.Symbol.Kind == SymbolKind.Method)
-                {
-                    return ownerExpression + "." + GenerateMethodCallExpression(memberName, parameterExpressions);
+                {                    
+                    string containingTypeFullName = SyntaxTreeHelper.GetFullyQualifiedName(symbolInfo.Symbol.ContainingType);
+                    string methodName = OverwriteMethodNameIfNeeded(memberName, containingTypeFullName);
+                    return ownerExpression + "." + GenerateMethodCallExpression(methodName, parameterExpressions);
                 }
                 if (symbolInfo.Symbol.Kind == SymbolKind.Property && symbolInfo.Symbol is IPropertySymbol)
                 {
@@ -1112,6 +1237,22 @@ public class " + typeName + generic + " {\n";
                 throw new NotImplementedException();
             }
             throw new NotImplementedException();
+        }
+
+        private string OverwriteMethodNameIfNeeded(string methodName, string containingTypeFullName)
+        {
+            if (containingTypeFullName == "System.Object")
+            {
+                if (methodName == "MemberwiseClone")
+                {
+                    return "clone";
+                }
+                if (methodName == "GetHashCode")
+                {
+                    return "hashCode";
+                }
+            }
+            return methodName;
         }
 
         private string GenerateIdentifierExpression(IdentifierNameSyntax identifierNameSyntax, SemanticModel semanticModel)
@@ -1319,6 +1460,10 @@ public class " + typeName + generic + " {\n";
             {
                 return GenerateIfStatement((statement as IfStatementSyntax), semanticModel);
             }
+            if (statement is ForEachStatementSyntax)
+            {
+                return GenerateForEachStatement((statement as ForEachStatementSyntax), semanticModel);
+            }
             if (statement is LocalDeclarationStatementSyntax)
             {
                 return GenerateLocalDeclaration((statement as LocalDeclarationStatementSyntax), semanticModel) + ";";
@@ -1336,6 +1481,19 @@ public class " + typeName + generic + " {\n";
                 return "throw " + ExpressionGenerator.GenerateExpression((statement as ThrowStatementSyntax).Expression, semanticModel) + ";";
             }
             throw new NotImplementedException();
+        }
+
+        private string GenerateForEachStatement(ForEachStatementSyntax forEachStatementSyntax, SemanticModel semanticModel)
+        {
+            string variable = forEachStatementSyntax.Identifier.ValueText;
+            var symbolInfo = semanticModel.GetSymbolInfo(forEachStatementSyntax.Type);
+            var namedTypeSymbol = symbolInfo.Symbol as INamedTypeSymbol;
+            var typeReference = TypeReferenceGenerator.GenerateTypeReference(namedTypeSymbol, semanticModel);
+            string iterable = ExpressionGenerator.GenerateExpression(forEachStatementSyntax.Expression, semanticModel);
+            string jStatements = GenerateBlock(forEachStatementSyntax.Statement as BlockSyntax, semanticModel);
+            return "for (" + typeReference.Text + " " + variable + " : " + iterable + ") {\n"
+                + "    " + jStatements + "\n"
+                + "}";
         }
 
         private string GenerateIfStatement(IfStatementSyntax ifStatementSyntax, SemanticModel semanticModel)
@@ -1442,6 +1600,9 @@ public class " + typeName + generic + " {\n";
 
                                                        {"bool", "boolean"},
                                                        {"System.Boolean", "boolean"},
+
+                                                       {"object", "Object"},
+                                                       {"System.Object", "Object"},
                                                    };
 
         Dictionary<string, string> jTypesInGenericContext = new Dictionary<string, string>
@@ -1460,6 +1621,9 @@ public class " + typeName + generic + " {\n";
 
                                                        {"bool", "Boolean"},
                                                        {"System.Boolean", "Boolean"},
+
+                                                       {"object", "Object"},
+                                                       {"System.Object", "Object"},
                                                    };
 
         public bool IsPredefined(string type)

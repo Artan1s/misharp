@@ -22,5 +22,10 @@ namespace ConsoleApplication1
                 .Select(s => new string(' ', countOfTabs * tabSize) + s)
                 .Aggregate((s, s1) => s + '\n' + s1);
         }
+
+        public static string ToUnderscoreCase(this string str)
+        {
+            return string.Concat(str.Select((x, i) => i > 0 && char.IsUpper(x) ? "_" + x.ToString() : x.ToString())).ToLower();
+        }
     }
 }
