@@ -342,32 +342,84 @@ namespace ConsoleApplication1.CSharp
                     typeReferences.Add(typeReference.Text);
                 }
 
-                var simplePropertyDescription = new SimplePropertyDescription
-                {
-                    PropertyName = identifier,
-                    PropertyType = typeReference,
-                    GetAccessModifier = new Optional<AccessModifier>(),
-                    SetAccessModifier = new Optional<AccessModifier>()
-                };
+
                 var propertyAccessModifier = GetAccessModifier(propertyDeclaration.Modifiers.ToList());
                 var accessors = propertyDeclaration.AccessorList.Accessors;
                 var getAccessor = accessors.FirstOrDefault(syntax => syntax.Keyword.Text == "get");
-                if (getAccessor != null)
-                {
-                    var getAccessModifier = GetAccessModifier(getAccessor.Modifiers);
-                    var getModifier = MaxRestrictionAccessModifier(propertyAccessModifier, getAccessModifier);
-                    simplePropertyDescription.GetAccessModifier = getModifier;
-                }
                 var setAccessor = accessors.FirstOrDefault(syntax => syntax.Keyword.Text == "set");
-                if (setAccessor != null)
+
+                if (propertyDeclaration.AccessorList.Accessors.Any(syntax => syntax.Body != null))
                 {
-                    var setAccessModifier = GetAccessModifier(setAccessor.Modifiers);
-                    var setModifier = MaxRestrictionAccessModifier(propertyAccessModifier, setAccessModifier);
-                    simplePropertyDescription.SetAccessModifier = setModifier;
+                    var complexPropertyDescription = new ComplexPropertyDescription
+                    {
+                        PropertyName = identifier,
+                        PropertyType = typeReference,
+                        GetAccessModifier = new Optional<AccessModifier>(),
+                        SetAccessModifier = new Optional<AccessModifier>()
+                    };
+                    if (getAccessor != null)
+                    {
+                        var getAccessModifier = GetAccessModifier(getAccessor.Modifiers);
+                        var getModifier = MaxRestrictionAccessModifier(propertyAccessModifier, getAccessModifier);
+                        complexPropertyDescription.GetAccessModifier = getModifier;
+                        if (getAccessor.Body != null)
+                        {
+                            var statements = new List<string>();
+                            foreach (var statement in getAccessor.Body.Statements)
+                            {
+                                string generatedStatement = StatementGenerator.Generate(statement, semanticModel);
+                                statements.Add(generatedStatement);
+                            }
+                            complexPropertyDescription.GetStatements = statements;
+                        }
+                    }
+                    if (setAccessor != null)
+                    {
+                        var setAccessModifier = GetAccessModifier(setAccessor.Modifiers);
+                        var setModifier = MaxRestrictionAccessModifier(propertyAccessModifier, setAccessModifier);
+                        complexPropertyDescription.SetAccessModifier = setModifier;
+                        if (setAccessor.Body != null)
+                        {
+                            var statements = new List<string>();
+                            foreach (var statement in setAccessor.Body.Statements)
+                            {
+                                string generatedStatement = StatementGenerator.Generate(statement, semanticModel);
+                                statements.Add(generatedStatement);
+                            }
+                            complexPropertyDescription.SetStatements = statements;
+                        }
+                    }
+
+                    SourceCode generatedProperty = PropertyGenerator.GenerateComplexProperty(complexPropertyDescription, semanticModel);
+                    generatedProperties.MainPart += "\n" + generatedProperty.MainPart;
+                }
+                else
+                {
+                    var simplePropertyDescription = new SimplePropertyDescription
+                    {
+                        PropertyName = identifier,
+                        PropertyType = typeReference,
+                        GetAccessModifier = new Optional<AccessModifier>(),
+                        SetAccessModifier = new Optional<AccessModifier>()
+                    };
+                    if (getAccessor != null)
+                    {
+                        var getAccessModifier = GetAccessModifier(getAccessor.Modifiers);
+                        var getModifier = MaxRestrictionAccessModifier(propertyAccessModifier, getAccessModifier);
+                        simplePropertyDescription.GetAccessModifier = getModifier;
+                    }
+                    if (setAccessor != null)
+                    {
+                        var setAccessModifier = GetAccessModifier(setAccessor.Modifiers);
+                        var setModifier = MaxRestrictionAccessModifier(propertyAccessModifier, setAccessModifier);
+                        simplePropertyDescription.SetAccessModifier = setModifier;
+                    }
+
+                    SourceCode generatedProperty = PropertyGenerator.GenerateSimpleProperty(simplePropertyDescription, semanticModel);
+                    generatedProperties.MainPart += "\n" + generatedProperty.MainPart;
                 }
 
-                SourceCode generatedProperty = PropertyGenerator.GenerateSimpleProperty(simplePropertyDescription, semanticModel);
-                generatedProperties.MainPart += "\n" + generatedProperty.MainPart;
+                
             }
             return generatedProperties;
         }
@@ -407,6 +459,21 @@ namespace ConsoleApplication1.CSharp
         public Optional<AccessModifier> GetAccessModifier { get; set; }
 
         public Optional<AccessModifier> SetAccessModifier { get; set; }
+    }
+
+    public class ComplexPropertyDescription
+    {
+        public string PropertyName { get; set; }
+
+        public TypeReference PropertyType { get; set; }
+
+        public Optional<AccessModifier> GetAccessModifier { get; set; }
+
+        public Optional<AccessModifier> SetAccessModifier { get; set; }
+
+        public List<string> GetStatements { get; set; }
+
+        public List<string> SetStatements { get; set; }
     }
 
     public enum AccessModifier
@@ -737,8 +804,9 @@ public enum " + typeName;
                 {
                     "return " + propertyBackingFieldName + ";"
                 };
+                string name = GenerateGetterMethodName(simplePropertyDescription.PropertyType, simplePropertyDescription.PropertyName);
                 var getter = MethodGenerator.Generate(
-                    "get" + simplePropertyDescription.PropertyName, simplePropertyDescription.PropertyType, 
+                    name, simplePropertyDescription.PropertyType, 
                     simplePropertyDescription.GetAccessModifier.Value,
                     new List<Var>(), getterStatements,
                     false,
@@ -765,12 +833,64 @@ public enum " + typeName;
             }
             return property;
         }
+
+        public SourceCode GenerateComplexProperty(ComplexPropertyDescription complexPropertyDescription, SemanticModel semanticModel)
+        {
+            string propertyBackingFieldName = complexPropertyDescription.PropertyName.ToLowerFirstChar();
+
+            var property = new SourceCode
+            {
+                MainPart = ""
+            };
+            if (complexPropertyDescription.GetAccessModifier.HasValue)
+            {
+                var getterStatements = complexPropertyDescription.GetStatements;
+                string name = GenerateGetterMethodName(complexPropertyDescription.PropertyType, complexPropertyDescription.PropertyName);
+                var getter = MethodGenerator.Generate(
+                    name, complexPropertyDescription.PropertyType,
+                    complexPropertyDescription.GetAccessModifier.Value,
+                    new List<Var>(), getterStatements,
+                    false,
+                    semanticModel);
+                property.MainPart += getter.MainPart + "\n";
+            }
+            if (complexPropertyDescription.SetAccessModifier.HasValue)
+            {
+                var setterStatements = complexPropertyDescription.SetStatements;
+                var setterArgs = new List<Var>
+                {
+                    new Var{Name = propertyBackingFieldName, Type = complexPropertyDescription.PropertyType}
+                };
+                var setter = MethodGenerator.Generate(
+                    "set" + complexPropertyDescription.PropertyName, JavaTypeReferences.Void,
+                    complexPropertyDescription.SetAccessModifier.Value,
+                    setterArgs, setterStatements,
+                    false,
+                    semanticModel);
+                property.MainPart += setter.MainPart + "\n";
+            }
+            return property;
+        }
+
+        public string GenerateGetterMethodName(TypeReference propertyType, string propertyName)
+        {
+            if (Equals(propertyType, JavaTypeReferences.Bool))
+            {
+                return propertyName.ToLowerFirstChar();
+            }
+            else
+            {
+                return "get" + propertyName;
+            }
+        }
     }
 
     public interface IPropertyGenerator
     {
         SourceCode GenerateSimpleProperty(SimplePropertyDescription simplePropertyDescription,
             SemanticModel semanticModel);
+
+        SourceCode GenerateComplexProperty(ComplexPropertyDescription complexPropertyDescription, SemanticModel semanticModel);
     }
 
     public class JavaMethodGenerator : IMethodGenerator
@@ -923,6 +1043,8 @@ public enum " + typeName;
 
         public IMethodGenerator MethodGenerator { get { return new JavaMethodGenerator(); } }
 
+        public JavaPropertyGenerator PropertyGenerator { get { return new JavaPropertyGenerator(); } }
+
         public IArgumentListGenerator ArgumentListGenerator { get { return new JavaArgumentListGenerator(); } }
 
         public ITypeReferenceGenerator TypeReferenceGenerator { get { return new JavaTypeReferenceGenerator(); } }
@@ -1056,7 +1178,9 @@ public enum " + typeName;
             if (symbolInfo.Symbol.Kind == SymbolKind.Property)
             {
                 string propertyName = memberAccessExpressionSyntax.Name.Identifier.ValueText;
-                string methodName = "get" + propertyName;
+                var type = (INamedTypeSymbol)semanticModel.GetTypeInfo(memberAccessExpressionSyntax).Type;
+                var typeReference = TypeReferenceGenerator.GenerateTypeReference(type, semanticModel);
+                string methodName = PropertyGenerator.GenerateGetterMethodName(typeReference, propertyName); ;
                 return memberOwnerExpression + "." + GenerateMethodCallExpression(methodName, new List<string>());
             }
             throw new NotImplementedException();
@@ -1133,7 +1257,7 @@ public enum " + typeName;
                 string generatedInvocationExpression = GenerateInvocationExpression(body as InvocationExpressionSyntax,
                     semanticModel);
                 string statement = generatedInvocationExpression + ";";
-                if (returnType != JavaTypeReferences.Void)
+                if (!Equals(returnType, JavaTypeReferences.Void))
                 {
                     statement += "return ";
                 }
@@ -1229,7 +1353,11 @@ public enum " + typeName;
                     var propertyType = (symbolInfo.Symbol as IPropertySymbol).Type as INamedTypeSymbol;
                     if (TypeReferenceGenerator.IsDelegateType(propertyType))
                     {
-                        return ownerExpression + "." + GenerateMethodCallExpression("get" + memberName, new List<string>()) +"." +
+                        string propertyName = memberAccessExpression.Name.Identifier.ValueText;
+                        var type = (INamedTypeSymbol)semanticModel.GetTypeInfo(memberAccessExpression).Type;
+                        var typeReference = TypeReferenceGenerator.GenerateTypeReference(type, semanticModel);
+                        string methodName = PropertyGenerator.GenerateGetterMethodName(typeReference, propertyName);
+                        return ownerExpression + "." + GenerateMethodCallExpression(methodName, new List<string>()) +"." +
                                GenerateMethodCallExpression("invoke", parameterExpressions);
                     }
                     throw new NotImplementedException();
@@ -1261,7 +1389,9 @@ public enum " + typeName;
             if (symbolInfo.Symbol.Kind == SymbolKind.Property)
             {
                 string propertyName = identifierNameSyntax.Identifier.ValueText;
-                string methodName = "get" + propertyName;
+                var type = (INamedTypeSymbol)semanticModel.GetTypeInfo(identifierNameSyntax).Type;
+                var typeReference = TypeReferenceGenerator.GenerateTypeReference(type, semanticModel);
+                string methodName = PropertyGenerator.GenerateGetterMethodName(typeReference, propertyName);
                 return GenerateMethodCallExpression(methodName, new List<string> { });
             }
             if (symbolInfo.Symbol.Kind == SymbolKind.Parameter)

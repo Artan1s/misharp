@@ -15,11 +15,38 @@ namespace ConsoleApplication1
         public bool IsGeneric { get; set; }
 
         public bool IsReferenceType { get; set; }
+
+        protected bool Equals(TypeReference other)
+        {
+            return IsPredefined.Equals(other.IsPredefined) && string.Equals(Text, other.Text) && IsGeneric.Equals(other.IsGeneric) && IsReferenceType.Equals(other.IsReferenceType);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != this.GetType()) return false;
+            return Equals((TypeReference) obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hashCode = IsPredefined.GetHashCode();
+                hashCode = (hashCode*397) ^ (Text != null ? Text.GetHashCode() : 0);
+                hashCode = (hashCode*397) ^ IsGeneric.GetHashCode();
+                hashCode = (hashCode*397) ^ IsReferenceType.GetHashCode();
+                return hashCode;
+            }
+        }
     }
 
     public class JavaTypeReferences
     {
         public static readonly TypeReference Void = new TypeReference{Text = "void", IsPredefined = true};
+
+        public static readonly TypeReference Bool = new TypeReference { Text = "boolean", IsPredefined = true };
     }
 
     public class Property
