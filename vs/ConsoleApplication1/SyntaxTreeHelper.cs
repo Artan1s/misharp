@@ -40,7 +40,7 @@ namespace ConsoleApplication1
             {
                 foreach (var attr in attrs.Attributes)
                 {
-                    if (attr.Name.ToString().StartsWith(Constants.NativeImplementationAttributeName))
+                    if (attr.Name.ToString().StartsWith(attributeName))
                     {
                         return attr;
                     }
