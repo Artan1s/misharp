@@ -1207,6 +1207,10 @@ public enum " + typeName;
             {
                 generatedExceptionName = "IllegalArgumentException";
             }
+            else if (exceptionTypeFullName == "System.ArgumentException")
+            {
+                generatedExceptionName = "IllegalArgumentException";
+            }
             else
             {
                 throw new NotSupportedException();
