@@ -222,6 +222,9 @@ namespace ConsoleApplication1.CSharp
             var propertyDeclarations = classDeclaration.DescendantNodes().OfType<PropertyDeclarationSyntax>();
             var generatedProperties = GetProperties(semanticModel, typeReferences, propertyDeclarations);
 
+            var fieldsDeclarations = classDeclaration.DescendantNodes().OfType<FieldDeclarationSyntax>();
+            var generatedFields = GetFields(semanticModel, typeReferences, fieldsDeclarations);
+
             var constructorDeclarations = classDeclaration.DescendantNodes().OfType<ConstructorDeclarationSyntax>();
             var generatedConstructors = GetConstructors(semanticModel, typeReferences, constructorDeclarations);
 
@@ -232,6 +235,7 @@ namespace ConsoleApplication1.CSharp
                 fullyQualifiedNameParts, genericTypeParameters,
                 typeInfo.BaseType,
                 generatedConstructors,
+                generatedFields,
                 generatedProperties,
                 generatedMethods);
 
@@ -424,7 +428,37 @@ namespace ConsoleApplication1.CSharp
             return generatedProperties;
         }
 
-        
+
+        private SourceCode GetFields(SemanticModel semanticModel, HashSet<string> typeReferences,
+            IEnumerable<FieldDeclarationSyntax> fieldsDeclarations)
+        {
+            var generatedFields = new SourceCode { MainPart = "" };
+            foreach (var fieldDeclaration in fieldsDeclarations)
+            {
+                var variables = fieldDeclaration.Declaration.Variables;
+                if (variables.Count != 1)
+                {
+                    throw new NotImplementedException();
+                }
+                var variable = variables.First();
+                string identifier = variable.Identifier.ValueText;
+                var fieldType = fieldDeclaration.Declaration.Type;
+                var typeReference = TypeReferenceGenerator.GenerateTypeReference(fieldType, semanticModel);
+                if (!typeReference.IsPredefined)
+                {
+                    typeReferences.Add(typeReference.Text);
+                }
+
+
+                var fieldAccessModifier = GetAccessModifier(fieldDeclaration.Modifiers.ToList());
+                string generatedAccessModifier = fieldAccessModifier == AccessModifier.Public ? "public" : "private";
+
+                string generatedField = generatedAccessModifier + " " + typeReference.Text + " " + identifier + ";\n";
+                generatedFields.MainPart += "\n" + generatedField;
+            }
+            return generatedFields;
+        }
+
 
         private AccessModifier GetAccessModifier(IEnumerable<SyntaxToken> modifiers)
         {
@@ -484,7 +518,11 @@ namespace ConsoleApplication1.CSharp
     public interface ITypeBuilder
     {
         SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts, IEnumerable<ITypeParameterSymbol> genericParameters, 
-            INamedTypeSymbol baseType, SourceCode generatedConstructors, SourceCode properties, SourceCode methods);
+            INamedTypeSymbol baseType, 
+            SourceCode generatedConstructors, 
+            SourceCode fields,
+            SourceCode properties, 
+            SourceCode methods);
 
         SourceCode BuildEnum(SemanticModel semanticModel, string[] fullyQualifiedNameParts, SeparatedSyntaxList<EnumMemberDeclarationSyntax> members);
     }
@@ -494,7 +532,11 @@ namespace ConsoleApplication1.CSharp
         protected JavaTypeReferenceGenerator TypeReferenceGenerator { get { return new JavaTypeReferenceGenerator(); } }
 
         public SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts, IEnumerable<ITypeParameterSymbol> genericParameters, 
-            INamedTypeSymbol baseType, SourceCode constructors, SourceCode properties, SourceCode methods)
+            INamedTypeSymbol baseType, 
+            SourceCode constructors,
+            SourceCode fields, 
+            SourceCode properties,
+            SourceCode methods)
         {
             string packageName = GetPackageName(fullyQualifiedNameParts);
             string generic = "";
@@ -525,6 +567,7 @@ public class " + typeName + generic;
                 code += " extends " + baseTypeReferenceText;
             }
             code += " {\n";
+            code += fields.MainPart.AddTab() + "\n";
             code += constructors.MainPart.AddTab() + "\n";
             code += properties.MainPart.AddTab() + "\n";
             code += methods.MainPart.AddTab();
@@ -1398,6 +1441,10 @@ public enum " + typeName;
                 string methodName = PropertyGenerator.GenerateGetterMethodName(typeReference, propertyName);
                 return GenerateMethodCallExpression(methodName, new List<string> { });
             }
+            if (symbolInfo.Symbol.Kind == SymbolKind.Field)
+            {
+                return identifierNameSyntax.Identifier.ValueText;
+            }
             if (symbolInfo.Symbol.Kind == SymbolKind.Parameter)
             {
                 return identifierNameSyntax.Identifier.ValueText;
@@ -1504,6 +1551,11 @@ public enum " + typeName;
             if (left is IdentifierNameSyntax)
             {
                 var leftSymbolInfo = semanticModel.GetSymbolInfo(assignmentExpressionSyntax.Left);
+                if (leftSymbolInfo.Symbol.Kind == SymbolKind.Field)
+                {
+                    string fieldName = (left as IdentifierNameSyntax).Identifier.ValueText;
+                    return fieldName + " = " + generatedRight;
+                }
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Property)
                 {
                     string propertyName = (left as IdentifierNameSyntax).Identifier.ValueText;
@@ -1514,7 +1566,7 @@ public enum " + typeName;
                 {
                     string localName = (left as IdentifierNameSyntax).Identifier.ValueText;
                     AssertIsChangeable((left as IdentifierNameSyntax).Identifier);
-                    return localName + "=" + generatedRight;
+                    return localName + " = " + generatedRight;
                 }
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Parameter)
                 {
