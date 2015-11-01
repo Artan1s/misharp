@@ -1617,11 +1617,24 @@ public enum " + typeName;
         {
             string variable = forEachStatementSyntax.Identifier.ValueText;
             var symbolInfo = semanticModel.GetSymbolInfo(forEachStatementSyntax.Type);
-            var namedTypeSymbol = symbolInfo.Symbol as INamedTypeSymbol;
-            var typeReference = TypeReferenceGenerator.GenerateTypeReference(namedTypeSymbol, semanticModel);
+            string variableTypeText;
+            if (symbolInfo.Symbol is INamedTypeSymbol)
+            {
+                var namedTypeSymbol = symbolInfo.Symbol as INamedTypeSymbol;
+                var typeReference = TypeReferenceGenerator.GenerateTypeReference(namedTypeSymbol, semanticModel);
+                variableTypeText = typeReference.Text;
+            }
+            else if (symbolInfo.Symbol is ITypeParameterSymbol)
+            {
+                variableTypeText = (symbolInfo.Symbol as ITypeParameterSymbol).Name;
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
             string iterable = ExpressionGenerator.GenerateExpression(forEachStatementSyntax.Expression, semanticModel);
             string jStatements = GenerateBlock(forEachStatementSyntax.Statement as BlockSyntax, semanticModel);
-            return "for (" + typeReference.Text + " " + variable + " : " + iterable + ") {\n"
+            return "for (" + variableTypeText + " " + variable + " : " + iterable + ") {\n"
                 + "    " + jStatements + "\n"
                 + "}";
         }
