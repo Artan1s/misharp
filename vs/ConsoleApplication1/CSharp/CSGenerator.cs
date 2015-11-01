@@ -1530,6 +1530,11 @@ public enum " + typeName;
                 string generatedArgument = GenerateExpression(argument.Expression, semanticModel);
                 return accessingExpression + ".set(" + generatedArgument + ", " + generatedRight + ")";
             }
+            if (left is MemberAccessExpressionSyntax)
+            {
+                var memberAccessExpressionSyntax = left as MemberAccessExpressionSyntax;
+                return "this." + memberAccessExpressionSyntax.Name + " = " + generatedRight;
+            }
             //return "";
             throw new NotImplementedException();
         }
