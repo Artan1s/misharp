@@ -1273,9 +1273,21 @@ public enum " + typeName;
             }
             if (expressionSyntax is BinaryExpressionSyntax)
             {
-                return GenerateExpression((expressionSyntax as BinaryExpressionSyntax).Left, semanticModel)
-                       + " " + (expressionSyntax as BinaryExpressionSyntax).OperatorToken.Text
-                       + " " + GenerateExpression((expressionSyntax as BinaryExpressionSyntax).Right, semanticModel);
+                var binaryExpressionSyntax = (expressionSyntax as BinaryExpressionSyntax);
+                string leftExpression = GenerateExpression(binaryExpressionSyntax.Left, semanticModel);
+                string rightExpression = GenerateExpression(binaryExpressionSyntax.Right, semanticModel);
+                string operatorString = binaryExpressionSyntax.OperatorToken.Text;
+
+                var leftExpressionType = (INamedTypeSymbol) semanticModel.GetTypeInfo(binaryExpressionSyntax.Left).Type;
+                if (CustomBinaryExpressionHelper.IsCustom(leftExpressionType, operatorString))
+                {
+                    return CustomBinaryExpressionHelper.Generate(leftExpressionType, leftExpression, operatorString,
+                        rightExpression, semanticModel);
+                }
+                else
+                {
+                    return leftExpression + " " + operatorString + " " + rightExpression;   
+                }                
             }
             if (expressionSyntax is PostfixUnaryExpressionSyntax)
             {
@@ -1467,7 +1479,7 @@ public enum " + typeName;
             for (int i = 0; i < parameters.Count; i++)
             {
                 var parameter = parameters[i];
-                var typeArgumentForParameter = isFunc ? typeSymbol.TypeArguments[i + 1] : typeSymbol.TypeArguments[i];
+                var typeArgumentForParameter = typeSymbol.TypeArguments[i];
                 var typeReference = TypeReferenceGenerator.GenerateTypeReference(typeArgumentForParameter, semanticModel, isInGenericContext: true);
                 generatedParameters.Add(new Var
                 {
@@ -1477,7 +1489,15 @@ public enum " + typeName;
 
             }
             var statements = new List<string>();
-            if (body is InvocationExpressionSyntax)
+            if (body is BlockSyntax)
+            {
+                foreach (var statement in (body as BlockSyntax).Statements)
+                {
+                    string generatedStatement = StatementGenerator.Generate(statement, semanticModel);
+                    statements.Add(generatedStatement);
+                }
+            }
+            else if (body is InvocationExpressionSyntax)
             {
                 string generatedInvocationExpression = GenerateInvocationExpression(body as InvocationExpressionSyntax,
                     semanticModel);
@@ -1493,13 +1513,10 @@ public enum " + typeName;
                 string statement = "return " + LiteralGenerator.Generate(body as LiteralExpressionSyntax, semanticModel) + ";";
                 statements.Add(statement);
             }
-            else if (body is BlockSyntax)
+            else if (body is BinaryExpressionSyntax)
             {
-                foreach (var statement in (body as BlockSyntax).Statements)
-                {
-                    string generatedStatement = StatementGenerator.Generate(statement, semanticModel);
-                    statements.Add(generatedStatement);
-                }
+                string statement = "return " + GenerateExpression(body as BinaryExpressionSyntax, semanticModel) + ";";
+                statements.Add(statement);
             }
             return BuildLambdaExpression(delegateType, generatedParameters, returnType, statements, semanticModel);
         }
@@ -1706,7 +1723,7 @@ public enum " + typeName;
                     new List<TypeReference>());
             }
 
-            returnType = isFunc ? typeParameters[0] : JavaTypeReferences.Void;
+            returnType = isFunc ? typeParameters.Last() : JavaTypeReferences.Void;
             return new DelegateInfo
             {
                 ReturnType = returnType,

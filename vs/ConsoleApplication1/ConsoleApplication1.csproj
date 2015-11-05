@@ -87,6 +87,7 @@
     <Compile Include="Constants.cs" />
     <Compile Include="CSharpGenerator.cs" />
     <Compile Include="CSharpProjectSourcesCollector.cs" />
+    <Compile Include="CSharp\CustomBinaryExpressionHelper.cs" />
     <Compile Include="CSharp\CSGenerator.cs" />
     <Compile Include="CSharp\CustomElementAccessHelper.cs" />
     <Compile Include="CSharp\CustomMethodInvocationHelper.cs" />
