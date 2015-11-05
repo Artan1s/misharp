@@ -1428,6 +1428,10 @@ public enum " + typeName;
             {
                 generatedExceptionName = "NullPointerException";
             }
+            else if (exceptionTypeFullName == "System.InvalidOperationException")
+            {
+                generatedExceptionName = "IllegalStateException";
+            }
             else
             {
                 throw new NotSupportedException();
