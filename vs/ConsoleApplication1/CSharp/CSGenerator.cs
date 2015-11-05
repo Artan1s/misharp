@@ -188,11 +188,37 @@ namespace ConsoleApplication1.CSharp
             {
                 Generate(classDeclaration, semanticModel, outputPath);
             }
+            var interfaceDeclarations = root.DescendantNodes().OfType<InterfaceDeclarationSyntax>();
+            foreach (var interfaceDeclaration in interfaceDeclarations)
+            {
+                Generate(interfaceDeclaration, semanticModel, outputPath);
+            }
             var enumDeclarations = root.DescendantNodes().OfType<EnumDeclarationSyntax>();
             foreach (var enumDeclaration in enumDeclarations)
             {
                 Generate(enumDeclaration, semanticModel, outputPath);
             }
+        }
+
+        private void Generate(InterfaceDeclarationSyntax interfaceDeclaration, SemanticModel semanticModel, string outputPath)
+        {
+            INamedTypeSymbol typeInfo = semanticModel.GetDeclaredSymbol(interfaceDeclaration);
+            var fullyQualifiedNameParts = SyntaxTreeHelper.GetFullyQualifiedNameParts(typeInfo);
+            var genericTypeParameters = typeInfo.TypeParameters;
+            var typeReferences = new HashSet<string>();
+
+            var propertyDeclarations = interfaceDeclaration.DescendantNodes().OfType<PropertyDeclarationSyntax>();
+            var generatedProperties = GetProperties(semanticModel, typeReferences, propertyDeclarations);
+
+            var methodDeclarations = interfaceDeclaration.DescendantNodes().OfType<MethodDeclarationSyntax>();
+            var generatedMethods = GetMethods(semanticModel, typeReferences, methodDeclarations);
+
+            var interfaceSourceCode = TypeBuilder.BuildInterface(semanticModel,
+                fullyQualifiedNameParts, genericTypeParameters,                
+                generatedProperties,
+                generatedMethods);
+
+            WriteToOutputIfPathPresent(outputPath, fullyQualifiedNameParts, interfaceSourceCode.MainPart);
         }
 
         private void Generate(EnumDeclarationSyntax enumDeclaration, SemanticModel semanticModel, string outputPath)
@@ -304,19 +330,29 @@ namespace ConsoleApplication1.CSharp
                 }
                 var accessModifier = GetAccessModifier(methodDeclaration.Modifiers.ToList());
                 bool isStatic = methodDeclaration.Modifiers.ToList().Any(token => token.Text == "static");
-                var statements = new List<string>();
-                foreach (var statement in methodDeclaration.Body.Statements)
+                Optional<List<string>> body;
+                if (methodDeclaration.Body == null)
                 {
-                    string generatedStatement = StatementGenerator.Generate(statement, semanticModel);
-                    statements.Add(generatedStatement);
-
+                    body = new Optional<List<string>>();
                 }
+                else
+                {
+                    var statements = new List<string>();
+                    foreach (var statement in methodDeclaration.Body.Statements)
+                    {
+                        string generatedStatement = StatementGenerator.Generate(statement, semanticModel);
+                        statements.Add(generatedStatement);
+                        new Optional<List<string>>();
+                    }
+                    body = new Optional<List<string>>(statements);
+                }
+                
                 var generatedMethod = MethodGenerator.Generate(identifier, 
                     returnTypeReference, 
                     typeParameters,
                     accessModifier, 
                     parameters,
-                    statements,
+                    body,
                     isStatic, 
                     semanticModel);
                 generatedMethods.MainPart += "\n" + generatedMethod.MainPart;
@@ -565,11 +601,17 @@ namespace ConsoleApplication1.CSharp
 
     public interface ITypeBuilder
     {
-        SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts, IEnumerable<ITypeParameterSymbol> genericParameters, 
+        SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts, 
+            IEnumerable<ITypeParameterSymbol> genericParameters, 
             INamedTypeSymbol baseType, 
             SourceCode generatedConstructors, 
             SourceCode fields,
             SourceCode properties, 
+            SourceCode methods);
+
+        SourceCode BuildInterface(SemanticModel semanticModel, string[] fullyQualifiedNameParts,
+            IEnumerable<ITypeParameterSymbol> genericParameters,
+            SourceCode properties,
             SourceCode methods);
 
         SourceCode BuildEnum(SemanticModel semanticModel, string[] fullyQualifiedNameParts, SeparatedSyntaxList<EnumMemberDeclarationSyntax> members);
@@ -624,6 +666,42 @@ public class " + typeName + generic;
                    {
                        MainPart = code
                    };
+        }
+
+        public SourceCode BuildInterface(SemanticModel semanticModel, string[] fullyQualifiedNameParts, 
+            IEnumerable<ITypeParameterSymbol> genericParameters,                        
+            SourceCode properties,
+            SourceCode methods)
+        {
+            string packageName = GetPackageName(fullyQualifiedNameParts);
+            string generic = "";
+            var genericParametersList = genericParameters as IList<ITypeParameterSymbol> ?? genericParameters.ToList();
+            if (genericParametersList.Any())
+            {
+                generic += "<";
+                for (int i = 0; i < genericParametersList.Count() - 1; i++)
+                {
+                    generic += genericParametersList[i].Name + ", ";
+                }
+                generic += genericParametersList.Last().Name + ">";
+            }
+            string typeName = fullyQualifiedNameParts.Last();
+
+
+
+            string code =
+@"package " + packageName + @";
+
+public interface " + typeName + generic;
+
+            code += " {\n";
+            code += properties.MainPart.AddTab() + "\n";
+            code += methods.MainPart.AddTab();
+            code += "\n}";
+            return new SourceCode
+            {
+                MainPart = code
+            };
         }
 
         public SourceCode BuildEnum(SemanticModel semanticModel, string[] fullyQualifiedNameParts, SeparatedSyntaxList<EnumMemberDeclarationSyntax> members)
@@ -882,8 +960,10 @@ public enum " + typeName;
             SemanticModel semanticModel)
         {
             string propertyBackingFieldName = simplePropertyDescription.PropertyName.ToLowerFirstChar();
+            string optionalStaticModifier = simplePropertyDescription.IsStatic ? "static " : "";
             string backingField = 
-                "private " + simplePropertyDescription.PropertyType.Text + " " + propertyBackingFieldName + ";\n";
+                "private " + optionalStaticModifier 
+                + simplePropertyDescription.PropertyType.Text + " " + propertyBackingFieldName + ";\n";
             
             var property = new SourceCode
                            {
@@ -907,9 +987,10 @@ public enum " + typeName;
             }
             if (simplePropertyDescription.SetAccessModifier.HasValue)
             {
+                string fieldAccessor = simplePropertyDescription.IsStatic ? "" : "this.";
                 var setterStatements = new List<string>
                 {
-                    "this." + propertyBackingFieldName + " = " + "value" + ";"
+                    fieldAccessor + propertyBackingFieldName + " = " + "value" + ";"
                 };
                 var setterArgs = new List<Var>
                 {
@@ -930,6 +1011,10 @@ public enum " + typeName;
         public SourceCode GenerateComplexProperty(ComplexPropertyDescription complexPropertyDescription, SemanticModel semanticModel)
         {
             string propertyBackingFieldName = complexPropertyDescription.PropertyName.ToLowerFirstChar();
+            //string optionalStaticModifier = complexPropertyDescription.IsStatic ? "static " : "";
+            //string backingField =
+            //    "private " + optionalStaticModifier
+            //    + complexPropertyDescription.PropertyType.Text + " " + propertyBackingFieldName + ";\n";
 
             var property = new SourceCode
             {
@@ -990,12 +1075,9 @@ public enum " + typeName;
 
     public class JavaMethodGenerator : IMethodGenerator
     {
-        public SourceCode Generate(string name, TypeReference returnType,
-            List<string> typeParameters,
-            AccessModifier accessModifier,
-            IEnumerable<Var> args, List<string> statements,
-            bool isStatic,
-            SemanticModel semanticModel)
+        public SourceCode Generate(string name, TypeReference returnType, List<string> typeParameters, 
+            AccessModifier accessModifier, IEnumerable<Var> args, 
+            Optional<List<string>> body, bool isStatic, SemanticModel semanticModel)
         {
             string jname = name.ToLowerFirstChar();
             string jAccessModifier = accessModifier == AccessModifier.Public ? "public" : "private";
@@ -1034,31 +1116,38 @@ public enum " + typeName;
             jArgs = jArgs.Trim(new[] { ' ', ',' });
 
 
-            string jStatements = nullGuardStatements;
-            foreach (var statement in statements)
+            var jBodyStringBuilder = new StringBuilder();
+            if (body.HasValue)
             {
-                jStatements += "\n" + statement;
+                jBodyStringBuilder.Append("{");
+                jBodyStringBuilder.Append(nullGuardStatements);
+                foreach (var statement in body.Value)
+                {
+                    jBodyStringBuilder.Append("\n\t");
+                    jBodyStringBuilder.Append(statement);
+                }
+                jBodyStringBuilder.Append("\n}");
+            }
+            else
+            {
+                jBodyStringBuilder.Append(";");
             }
 
 
             return new SourceCode
                    {
                        MainPart = string.Format(
-                           @"{0} {1} {2} {3}({4}) {{{5}
-}}", jAccessModifier, jTypeParametersSb, returnType.Text,
-        jname, jArgs, jStatements.AddTab()) + "\n"
+                           @"{0} {1} {2} {3}({4}) {5}", jAccessModifier, jTypeParametersSb, returnType.Text,
+        jname, jArgs, jBodyStringBuilder) + "\n"
                    };
         }
     }
 
     public interface IMethodGenerator
     {
-        SourceCode Generate(string name, TypeReference returnType,
-            List<string> typeParameters,
-            AccessModifier accessModifier,
-            IEnumerable<Var> args, List<string> statements,
-            bool isStatic,
-            SemanticModel semanticModel);
+        SourceCode Generate(string name, TypeReference returnType, List<string> typeParameters, 
+            AccessModifier accessModifier, IEnumerable<Var> args, 
+            Optional<List<string>> body, bool isStatic, SemanticModel semanticModel);
     }
 
     public interface IConstructorGenerator
