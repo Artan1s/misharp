@@ -24,7 +24,8 @@ namespace ConsoleApplication1
     {
         private static SemanticModel semanticModel;
 
-        private static string cpDirPath = @"C:\Users\Mikhail\SkyDrive\Work\30.10.2015\ConsoleApplication2";
+        //private static string cpDirPath = @"C:\Users\Mikhail\SkyDrive\Work\30.10.2015\ConsoleApplication2";
+        private static string cpDirPath = @"C:\Users\Misha\OneDrive\Work\30.10.2015\ConsoleApplication2";
         private static DirectoryInfo cpDir = new DirectoryInfo(cpDirPath);
 
         private static DirectoryInfo cpCSharpOutputDirectory =
@@ -55,8 +56,10 @@ namespace ConsoleApplication1
 //            }
 
             //local
+            //(new JavaGenerator()).Generate(cpDirPath,
+            //    @"C:\Users\Mikhail\ConsuloProjects\xcross\src");
             (new JavaGenerator()).Generate(cpDirPath,
-                @"C:\Users\Mikhail\ConsuloProjects\xcross\src");
+                @"D:\Android\j2objc\j2objctest3\xcross\src\main\java");
 
             //belqi
 //            (new JavaGenerator()).Generate("D:\\WindowsPhone\\Belqi\\Belqi\\PaymentSystemCore\\BuisnessEntities",

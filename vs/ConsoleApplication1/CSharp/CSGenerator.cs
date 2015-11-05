@@ -1335,6 +1335,10 @@ public enum " + typeName;
             {
                 generatedExceptionName = "IllegalArgumentException";
             }
+            else if (exceptionTypeFullName == "System.NullReferenceException")
+            {
+                generatedExceptionName = "NullPointerException";
+            }
             else
             {
                 throw new NotSupportedException();
