@@ -35,6 +35,10 @@ namespace ConsoleApplication1.CSharp
             {
                 return literal.GetText().ToString();
             }
+            if (literal.IsKind(SyntaxKind.CharacterLiteralExpression))
+            {
+                return literal.GetText().ToString();
+            }
             throw new NotImplementedException();
         }
     }

@@ -24,7 +24,7 @@ namespace ConsoleApplication1
     {
         private static SemanticModel semanticModel;
 
-        private static string cpDirPath = @"D:\misharp\vs\CP";
+        private static string cpDirPath = @"C:\Users\Mikhail\SkyDrive\Work\30.10.2015\ConsoleApplication2";
         private static DirectoryInfo cpDir = new DirectoryInfo(cpDirPath);
 
         private static DirectoryInfo cpCSharpOutputDirectory =
@@ -55,12 +55,12 @@ namespace ConsoleApplication1
 //            }
 
             //local
-            //(new JavaGenerator()).Generate(cpDirPath, 
-            //    "D:\\Android\\payment_system_one_click_payment\\paymentsystem\\paymentsystemcore\\src\\main\\java");
+            (new JavaGenerator()).Generate(cpDirPath,
+                @"C:\Users\Mikhail\ConsuloProjects\xcross\src");
 
             //belqi
-            (new JavaGenerator()).Generate("D:\\WindowsPhone\\Belqi\\Belqi\\PaymentSystemCore\\BuisnessEntities",
-                "D:\\Android\\payment_system_one_click_payment\\paymentsystem\\paymentsystemcore\\src\\main\\java");
+//            (new JavaGenerator()).Generate("D:\\WindowsPhone\\Belqi\\Belqi\\PaymentSystemCore\\BuisnessEntities",
+//                "D:\\Android\\payment_system_one_click_payment\\paymentsystem\\paymentsystemcore\\src\\main\\java");
             //GenerateCpCSharp();
 
             //GenerateCpJava();

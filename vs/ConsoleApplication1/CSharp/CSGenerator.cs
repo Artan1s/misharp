@@ -44,6 +44,11 @@ namespace ConsoleApplication1.CSharp
             get { throw new NotImplementedException(); }
         }
 
+        protected override IExpressionGenerator ExpressionGenerator
+        {
+            get { throw new NotImplementedException(); }
+        }
+
         protected override ITypeReferenceGenerator TypeReferenceGenerator
         {
             get { throw new NotImplementedException(); }
@@ -92,6 +97,11 @@ namespace ConsoleApplication1.CSharp
             get { return new JavaStatementGenerator(); }
         }
 
+        protected override IExpressionGenerator ExpressionGenerator
+        {
+            get { return new JavaExpressionGenerator(); }
+        }
+
         protected override ITypeReferenceGenerator TypeReferenceGenerator
         {
             get { return new JavaTypeReferenceGenerator(); }
@@ -121,6 +131,8 @@ namespace ConsoleApplication1.CSharp
         protected abstract IConstructorGenerator ConstructorGenerator { get; }
 
         protected abstract IStatementGenerator StatementGenerator { get; }
+
+        protected abstract IExpressionGenerator ExpressionGenerator { get; }
 
         protected abstract ITypeReferenceGenerator TypeReferenceGenerator { get; }
 
@@ -271,6 +283,14 @@ namespace ConsoleApplication1.CSharp
                 {
                     typeReferences.Add(returnTypeReference.Text);
                 }
+                var typeParameters = new List<string>();
+                if (methodDeclaration.TypeParameterList != null)
+                {
+                    foreach (var typeParameter in methodDeclaration.TypeParameterList.Parameters)
+                    {
+                        typeParameters.Add(typeParameter.Identifier.ValueText);
+                    }
+                }
                 var parameters = new List<Var>();
                 foreach (var parameter in methodDeclaration.ParameterList.Parameters)
                 {
@@ -291,7 +311,11 @@ namespace ConsoleApplication1.CSharp
                     statements.Add(generatedStatement);
 
                 }
-                var generatedMethod = MethodGenerator.Generate(identifier, returnTypeReference, accessModifier, parameters,
+                var generatedMethod = MethodGenerator.Generate(identifier, 
+                    returnTypeReference, 
+                    typeParameters,
+                    accessModifier, 
+                    parameters,
                     statements,
                     isStatic, 
                     semanticModel);
@@ -346,6 +370,7 @@ namespace ConsoleApplication1.CSharp
                     typeReferences.Add(typeReference.Text);
                 }
 
+                bool isStatic = HasStaticModifier(propertyDeclaration.Modifiers.ToList());
 
                 var propertyAccessModifier = GetAccessModifier(propertyDeclaration.Modifiers.ToList());
                 var accessors = propertyDeclaration.AccessorList.Accessors;
@@ -359,7 +384,8 @@ namespace ConsoleApplication1.CSharp
                         PropertyName = identifier,
                         PropertyType = typeReference,
                         GetAccessModifier = new Optional<AccessModifier>(),
-                        SetAccessModifier = new Optional<AccessModifier>()
+                        SetAccessModifier = new Optional<AccessModifier>(),
+                        IsStatic = isStatic
                     };
                     if (getAccessor != null)
                     {
@@ -404,7 +430,8 @@ namespace ConsoleApplication1.CSharp
                         PropertyName = identifier,
                         PropertyType = typeReference,
                         GetAccessModifier = new Optional<AccessModifier>(),
-                        SetAccessModifier = new Optional<AccessModifier>()
+                        SetAccessModifier = new Optional<AccessModifier>(),
+                        IsStatic = isStatic
                     };
                     if (getAccessor != null)
                     {
@@ -449,11 +476,23 @@ namespace ConsoleApplication1.CSharp
                     typeReferences.Add(typeReference.Text);
                 }
 
+                bool isStatic = HasStaticModifier(fieldDeclaration.Modifiers.ToList());
+                string optionalStaticModifierText = isStatic ? "static " : "";
 
                 var fieldAccessModifier = GetAccessModifier(fieldDeclaration.Modifiers.ToList());
                 string generatedAccessModifier = fieldAccessModifier == AccessModifier.Public ? "public" : "private";
 
-                string generatedField = generatedAccessModifier + " " + typeReference.Text + " " + identifier + ";\n";
+                string initializerText = "";
+                if (variable.Initializer != null)
+                {
+                    string initializerValueText = ExpressionGenerator
+                        .GenerateExpression(variable.Initializer.Value, semanticModel);
+                    initializerText += " = " + initializerValueText;
+                }
+
+                string generatedField = 
+                    generatedAccessModifier + " " + optionalStaticModifierText + typeReference.Text + " " 
+                        + identifier + initializerText + ";\n";
                 generatedFields.MainPart += "\n" + generatedField;
             }
             return generatedFields;
@@ -472,6 +511,11 @@ namespace ConsoleApplication1.CSharp
                 return AccessModifier.Private;
             }
             return AccessModifier.Public;
+        }
+
+        private bool HasStaticModifier(IEnumerable<SyntaxToken> modifiers)
+        {
+            return modifiers.Any(node => node.Text == "static");
         }
 
         private AccessModifier MaxRestrictionAccessModifier(AccessModifier accessModifier1, AccessModifier accessModifier2)
@@ -493,6 +537,8 @@ namespace ConsoleApplication1.CSharp
         public Optional<AccessModifier> GetAccessModifier { get; set; }
 
         public Optional<AccessModifier> SetAccessModifier { get; set; }
+
+        public bool IsStatic { get; set; }
     }
 
     public class ComplexPropertyDescription
@@ -504,6 +550,8 @@ namespace ConsoleApplication1.CSharp
         public Optional<AccessModifier> GetAccessModifier { get; set; }
 
         public Optional<AccessModifier> SetAccessModifier { get; set; }
+
+        public bool IsStatic { get; set; }
 
         public List<string> GetStatements { get; set; }
 
@@ -767,7 +815,7 @@ public enum " + typeName;
                     }
                 }
                 string typeReferenceText = TypeReferenceBuilder
-                    .BuildTypeReference(new[] { "cp", name }, typeParameters);
+                    .BuildTypeReference(new[] { "by.besmart.cross.delegates", name }, typeParameters);
                 return new TypeReference
                 {
                     Text = typeReferenceText,
@@ -776,7 +824,7 @@ public enum " + typeName;
                 };
             }
             string typeReferenceTextNonGeneric = TypeReferenceBuilder
-                    .BuildTypeReference(new[] { "cp", name }, new List<TypeReference>());
+                    .BuildTypeReference(new[] { "by.besmart.cross.delegates", name }, new List<TypeReference>());
             return new TypeReference
             {
                 Text = typeReferenceTextNonGeneric,
@@ -850,9 +898,10 @@ public enum " + typeName;
                 string name = GenerateGetterMethodName(simplePropertyDescription.PropertyType, simplePropertyDescription.PropertyName);
                 var getter = MethodGenerator.Generate(
                     name, simplePropertyDescription.PropertyType, 
+                    new List<string>(), 
                     simplePropertyDescription.GetAccessModifier.Value,
                     new List<Var>(), getterStatements,
-                    false,
+                    simplePropertyDescription.IsStatic,
                     semanticModel);
                 property.MainPart += getter.MainPart + "\n";
             }
@@ -860,17 +909,18 @@ public enum " + typeName;
             {
                 var setterStatements = new List<string>
                 {
-                    "this." + propertyBackingFieldName + " = " + propertyBackingFieldName + ";"
+                    "this." + propertyBackingFieldName + " = " + "value" + ";"
                 };
                 var setterArgs = new List<Var>
                 {
-                    new Var{Name = propertyBackingFieldName, Type = simplePropertyDescription.PropertyType}
+                    new Var{Name = "value", Type = simplePropertyDescription.PropertyType}
                 };
                 var setter = MethodGenerator.Generate(
                     "set" + simplePropertyDescription.PropertyName, JavaTypeReferences.Void,
+                    new List<string>(),
                     simplePropertyDescription.SetAccessModifier.Value,
                     setterArgs, setterStatements,
-                    false, 
+                    simplePropertyDescription.IsStatic, 
                     semanticModel);
                 property.MainPart += setter.MainPart + "\n";
             }
@@ -891,9 +941,10 @@ public enum " + typeName;
                 string name = GenerateGetterMethodName(complexPropertyDescription.PropertyType, complexPropertyDescription.PropertyName);
                 var getter = MethodGenerator.Generate(
                     name, complexPropertyDescription.PropertyType,
+                    new List<string>(),
                     complexPropertyDescription.GetAccessModifier.Value,
                     new List<Var>(), getterStatements,
-                    false,
+                    complexPropertyDescription.IsStatic,
                     semanticModel);
                 property.MainPart += getter.MainPart + "\n";
             }
@@ -902,13 +953,14 @@ public enum " + typeName;
                 var setterStatements = complexPropertyDescription.SetStatements;
                 var setterArgs = new List<Var>
                 {
-                    new Var{Name = propertyBackingFieldName, Type = complexPropertyDescription.PropertyType}
+                    new Var{Name = "value", Type = complexPropertyDescription.PropertyType}
                 };
                 var setter = MethodGenerator.Generate(
                     "set" + complexPropertyDescription.PropertyName, JavaTypeReferences.Void,
+                    new List<string>(),
                     complexPropertyDescription.SetAccessModifier.Value,
                     setterArgs, setterStatements,
-                    false,
+                    complexPropertyDescription.IsStatic,
                     semanticModel);
                 property.MainPart += setter.MainPart + "\n";
             }
@@ -939,6 +991,7 @@ public enum " + typeName;
     public class JavaMethodGenerator : IMethodGenerator
     {
         public SourceCode Generate(string name, TypeReference returnType,
+            List<string> typeParameters,
             AccessModifier accessModifier,
             IEnumerable<Var> args, List<string> statements,
             bool isStatic,
@@ -950,6 +1003,18 @@ public enum " + typeName;
             {
                 jAccessModifier += " static";
             }
+
+            var jTypeParametersSb = new StringBuilder();
+            if (typeParameters.Any())
+            {
+                jTypeParametersSb.Append("<");
+                for (int i = 0; i < typeParameters.Count -1; i++)
+                {
+                    jTypeParametersSb.Append(typeParameters[i] + ",");
+                }
+                jTypeParametersSb.Append(typeParameters.Last() + ">");
+            }
+            
 
             string nullGuardStatements = "";
 
@@ -979,8 +1044,9 @@ public enum " + typeName;
             return new SourceCode
                    {
                        MainPart = string.Format(
-                           @"{0} {1} {2}({3}) {{{4}
-}}", jAccessModifier, returnType.Text, jname, jArgs, jStatements.AddTab()) + "\n"
+                           @"{0} {1} {2} {3}({4}) {{{5}
+}}", jAccessModifier, jTypeParametersSb, returnType.Text,
+        jname, jArgs, jStatements.AddTab()) + "\n"
                    };
         }
     }
@@ -988,6 +1054,7 @@ public enum " + typeName;
     public interface IMethodGenerator
     {
         SourceCode Generate(string name, TypeReference returnType,
+            List<string> typeParameters,
             AccessModifier accessModifier,
             IEnumerable<Var> args, List<string> statements,
             bool isStatic,
@@ -1015,12 +1082,13 @@ public enum " + typeName;
             foreach (var arg in args)
             {
                 jArgs += "final " + arg.Type.Text + " " + arg.Name + ",";
-                if (arg.Type.IsReferenceType)
-                {
-                    nullGuardStatements += "\nif (" + arg.Name + " == null) {\n"
-                                           + "    throw new IllegalArgumentException(\"" + arg.Name + "\");\n"
-                                           + "}";
-                }
+                // todo: handle enabling/disabling null guard
+//                if (arg.Type.IsReferenceType)
+//                {
+//                    nullGuardStatements += "\nif (" + arg.Name + " == null) {\n"
+//                                           + "    throw new IllegalArgumentException(\"" + arg.Name + "\");\n"
+//                                           + "}";
+//                }
             }
             jArgs = jArgs.Trim(new[] { ' ', ',' });
 
@@ -1180,6 +1248,7 @@ public enum " + typeName;
         private string GenerateElementAccessExpression(ElementAccessExpressionSyntax elementAccessExpressionSyntax, SemanticModel semanticModel)
         {
             string accessingExpression = GenerateExpression(elementAccessExpressionSyntax.Expression, semanticModel);
+            var accessingType = (INamedTypeSymbol)semanticModel.GetTypeInfo(elementAccessExpressionSyntax.Expression).Type;
             var arguments = elementAccessExpressionSyntax.ArgumentList.Arguments;
             if (!arguments.Any())
             {
@@ -1187,6 +1256,10 @@ public enum " + typeName;
             }
             var argument = arguments[0];
             string generatedArgument = GenerateExpression(argument.Expression, semanticModel);
+            if (CustomElementAccessHelper.IsCustom(accessingType))
+            {
+                return CustomElementAccessHelper.Generate(accessingType, accessingExpression, generatedArgument, elementAccessExpressionSyntax, semanticModel);
+            }
             return accessingExpression + ".get(" + generatedArgument + ")";
         }
 
@@ -1222,9 +1295,17 @@ public enum " + typeName;
             {
                 string propertyName = memberAccessExpressionSyntax.Name.Identifier.ValueText;
                 var type = (INamedTypeSymbol)semanticModel.GetTypeInfo(memberAccessExpressionSyntax).Type;
-                var typeReference = TypeReferenceGenerator.GenerateTypeReference(type, semanticModel);
-                string methodName = PropertyGenerator.GenerateGetterMethodName(typeReference, propertyName); ;
-                return memberOwnerExpression + "." + GenerateMethodCallExpression(methodName, new List<string>());
+                var ownerType = (INamedTypeSymbol)semanticModel.GetTypeInfo(memberAccessExpressionSyntax.Expression).Type;
+                if (CustomPropertyAccessHelper.IsCustom(ownerType, propertyName))
+                {
+                    return CustomPropertyAccessHelper.Generate(ownerType, memberOwnerExpression, propertyName);
+                }
+                else
+                {
+                    var typeReference = TypeReferenceGenerator.GenerateTypeReference(type, semanticModel);
+                    string methodName = PropertyGenerator.GenerateGetterMethodName(typeReference, propertyName);
+                    return memberOwnerExpression + "." + GenerateMethodCallExpression(methodName, new List<string>());
+                }
             }
             throw new NotImplementedException();
         }
@@ -1328,7 +1409,8 @@ public enum " + typeName;
 
         private string BuildLambdaExpression(string delegateType, List<Var> generatedParameters, TypeReference returnType, List<string> statements, SemanticModel semanticModel)
         {
-            string method = MethodGenerator.Generate("invoke", returnType, AccessModifier.Public, generatedParameters, statements,
+            string method = MethodGenerator.Generate("invoke", returnType, new List<string>(), 
+                AccessModifier.Public, generatedParameters, statements,
                 false,
                 semanticModel).MainPart;
             string generatedExpression = string.Format(@"new {0}() {{
@@ -1373,7 +1455,8 @@ public enum " + typeName;
                     return identifierNameExpression.Identifier.ValueText + "." + GenerateMethodCallExpression("invoke", parameterExpressions);
                 }
                 string containingTypeFullName = SyntaxTreeHelper.GetFullyQualifiedName(symbolInfo.Symbol.ContainingType);
-                string methodName = OverwriteMethodNameIfNeeded(invocationExpressionSyntax.Expression.GetText().ToString().Trim(), containingTypeFullName); 
+                string methodName = invocationExpressionSyntax.Expression.GetText()
+                    .ToString().Trim();
                 return GenerateMethodCallExpression(methodName, parameterExpressions);
             }
             if (expression is MemberAccessExpressionSyntax)
@@ -1392,8 +1475,16 @@ public enum " + typeName;
                 if (symbolInfo.Symbol.Kind == SymbolKind.Method)
                 {                    
                     string containingTypeFullName = SyntaxTreeHelper.GetFullyQualifiedName(symbolInfo.Symbol.ContainingType);
-                    string methodName = OverwriteMethodNameIfNeeded(memberName, containingTypeFullName);
-                    return ownerExpression + "." + GenerateMethodCallExpression(methodName, parameterExpressions);
+                    string methodName = memberName;
+                    if (CustomMethodInvocationHelper.IsCustom(containingTypeFullName, methodName))
+                    {
+                        return CustomMethodInvocationHelper.Generate(containingTypeFullName,
+                            ownerExpression, methodName, parameterExpressions);
+                    }
+                    else
+                    {
+                        return ownerExpression + "." + GenerateMethodCallExpression(methodName, parameterExpressions);
+                    }
                 }
                 if (symbolInfo.Symbol.Kind == SymbolKind.Property && symbolInfo.Symbol is IPropertySymbol)
                 {
@@ -1412,22 +1503,6 @@ public enum " + typeName;
                 throw new NotImplementedException();
             }
             throw new NotImplementedException();
-        }
-
-        private string OverwriteMethodNameIfNeeded(string methodName, string containingTypeFullName)
-        {
-            if (containingTypeFullName == "System.Object")
-            {
-                if (methodName == "MemberwiseClone")
-                {
-                    return "clone";
-                }
-                if (methodName == "GetHashCode")
-                {
-                    return "hashCode";
-                }
-            }
-            return methodName;
         }
 
         private string GenerateIdentifierExpression(IdentifierNameSyntax identifierNameSyntax, SemanticModel semanticModel)
@@ -1525,12 +1600,12 @@ public enum " + typeName;
                         delegateType += "T";
                     }
                 }
-                delegateType = TypeReferenceBuilder.BuildTypeReference(new string[] { "cp", delegateType },
+                delegateType = TypeReferenceBuilder.BuildTypeReference(new string[] { "by.besmart.cross.delegates", delegateType },
                     typeParameters);
             }
             else
             {
-                delegateType = TypeReferenceBuilder.BuildTypeReference(new string[] { "cp", delegateType },
+                delegateType = TypeReferenceBuilder.BuildTypeReference(new string[] { "by.besmart.cross.delegates", delegateType },
                     new List<TypeReference>());
             }
 
@@ -1548,25 +1623,34 @@ public enum " + typeName;
         {
             string generatedRight = GenerateExpression(assignmentExpressionSyntax.Right, semanticModel);
             var left = assignmentExpressionSyntax.Left;
+
+            string leftAccessingChain = "";
+            if (left is MemberAccessExpressionSyntax)
+            {
+                var memberAccessExpressionSyntax = left as MemberAccessExpressionSyntax;
+                leftAccessingChain += 
+                    GenerateExpression(memberAccessExpressionSyntax.Expression, semanticModel) + ".";
+                left = memberAccessExpressionSyntax.Name;
+            }
             if (left is IdentifierNameSyntax)
             {
                 var leftSymbolInfo = semanticModel.GetSymbolInfo(assignmentExpressionSyntax.Left);
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Field)
                 {
                     string fieldName = (left as IdentifierNameSyntax).Identifier.ValueText;
-                    return fieldName + " = " + generatedRight;
+                    return leftAccessingChain + fieldName + " = " + generatedRight;
                 }
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Property)
                 {
                     string propertyName = (left as IdentifierNameSyntax).Identifier.ValueText;
                     string methodName = "set" + propertyName;
-                    return GenerateMethodCallExpression(methodName, new List<string> { generatedRight });
+                    return leftAccessingChain + GenerateMethodCallExpression(methodName, new List<string> { generatedRight });
                 }
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Local)
                 {
                     string localName = (left as IdentifierNameSyntax).Identifier.ValueText;
                     AssertIsChangeable((left as IdentifierNameSyntax).Identifier);
-                    return localName + " = " + generatedRight;
+                    return leftAccessingChain + localName + " = " + generatedRight;
                 }
                 if (leftSymbolInfo.Symbol.Kind == SymbolKind.Parameter)
                 {
@@ -1586,12 +1670,6 @@ public enum " + typeName;
                 string generatedArgument = GenerateExpression(argument.Expression, semanticModel);
                 return accessingExpression + ".set(" + generatedArgument + ", " + generatedRight + ")";
             }
-            if (left is MemberAccessExpressionSyntax)
-            {
-                var memberAccessExpressionSyntax = left as MemberAccessExpressionSyntax;
-                return "this." + memberAccessExpressionSyntax.Name + " = " + generatedRight;
-            }
-            //return "";
             throw new NotImplementedException();
         }
 
@@ -1607,7 +1685,7 @@ public enum " + typeName;
             }
         }
 
-        private string GenerateMethodCallExpression(string methodName, List<string> parameterExpressions)
+        public string GenerateMethodCallExpression(string methodName, List<string> parameterExpressions)
         {
             string jName = methodName.ToLowerFirstChar();
             string methodCall = jName + "(";
