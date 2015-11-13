@@ -1813,11 +1813,11 @@ public enum " + typeName;
         private static void AssertIsChangeable(SyntaxToken localIdentifier)
         {
             string localName = localIdentifier.ValueText;
-            bool isReadOnly = !localName.StartsWith("val");
+            bool isReadOnly = !localName.StartsWith("___");
             if (isReadOnly)
             {
                 throw ExceptionHelper.CreateInvalidOperationExceptionWithSourceData(
-                    "You can change ONLY local variables with names starting with 'val', other considered unchangeable.",
+                    "You can change ONLY local variables with names starting with '___', other considered unchangeable.",
                     localIdentifier);
             }
         }
@@ -1880,7 +1880,15 @@ public enum " + typeName;
             }
             if (statement is ReturnStatementSyntax)
             {
-                return "return " + ExpressionGenerator.GenerateExpression((statement as ReturnStatementSyntax).Expression, semanticModel) + ";";
+                var returnValueExpression = (statement as ReturnStatementSyntax).Expression;
+                if (returnValueExpression != null)
+                {
+                    return "return " + ExpressionGenerator.GenerateExpression(returnValueExpression, semanticModel) + ";";
+                }
+                else
+                {
+                    return "return;";
+                }
             }
             if (statement is ThrowStatementSyntax)
             {
@@ -1918,12 +1926,16 @@ public enum " + typeName;
         private string GenerateIfStatement(IfStatementSyntax ifStatementSyntax, SemanticModel semanticModel)
         {
             string condition = ExpressionGenerator.GenerateExpression(ifStatementSyntax.Condition, semanticModel);
+
+            string jStatements;
             if (!(ifStatementSyntax.Statement is BlockSyntax))
             {
-                throw new NotImplementedException();
+                jStatements = Generate(ifStatementSyntax.Statement, semanticModel);
             }
-
-            string jStatements = GenerateBlock(ifStatementSyntax.Statement as BlockSyntax, semanticModel);
+            else
+            {
+                jStatements = GenerateBlock(ifStatementSyntax.Statement as BlockSyntax, semanticModel);
+            }
 
             string ifStatement = "if (" + condition + ") {";
             if (!string.IsNullOrEmpty(jStatements))
