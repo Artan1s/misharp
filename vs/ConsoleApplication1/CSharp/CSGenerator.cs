@@ -329,7 +329,8 @@ namespace ConsoleApplication1.CSharp
 
                 }
                 var accessModifier = GetAccessModifier(methodDeclaration.Modifiers.ToList());
-                bool isStatic = methodDeclaration.Modifiers.ToList().Any(token => token.Text == "static");
+                bool isStatic = HasStaticModifier(methodDeclaration.Modifiers.ToList());
+                bool isVirtual = HasVirtualModifier(methodDeclaration.Modifiers.ToList());
                 Optional<List<string>> body;
                 if (methodDeclaration.Body == null)
                 {
@@ -354,6 +355,7 @@ namespace ConsoleApplication1.CSharp
                     parameters,
                     body,
                     isStatic, 
+                    isVirtual,
                     semanticModel);
                 generatedMethods.MainPart += "\n" + generatedMethod.MainPart;
             }
@@ -407,6 +409,7 @@ namespace ConsoleApplication1.CSharp
                 }
 
                 bool isStatic = HasStaticModifier(propertyDeclaration.Modifiers.ToList());
+                bool isVirtual = HasVirtualModifier(propertyDeclaration.Modifiers.ToList());
 
                 var propertyAccessModifier = GetAccessModifier(propertyDeclaration.Modifiers.ToList());
                 var accessors = propertyDeclaration.AccessorList.Accessors;
@@ -421,7 +424,8 @@ namespace ConsoleApplication1.CSharp
                         PropertyType = typeReference,
                         GetAccessModifier = new Optional<AccessModifier>(),
                         SetAccessModifier = new Optional<AccessModifier>(),
-                        IsStatic = isStatic
+                        IsStatic = isStatic,
+                        IsVirtual = isVirtual
                     };
                     if (getAccessor != null)
                     {
@@ -467,7 +471,8 @@ namespace ConsoleApplication1.CSharp
                         PropertyType = typeReference,
                         GetAccessModifier = new Optional<AccessModifier>(),
                         SetAccessModifier = new Optional<AccessModifier>(),
-                        IsStatic = isStatic
+                        IsStatic = isStatic,
+                        IsVirtual = isVirtual
                     };
                     if (getAccessor != null)
                     {
@@ -554,6 +559,11 @@ namespace ConsoleApplication1.CSharp
             return modifiers.Any(node => node.Text == "static");
         }
 
+        private bool HasVirtualModifier(IEnumerable<SyntaxToken> modifiers)
+        {
+            return modifiers.Any(node => node.Text == "virtual");
+        }
+
         private AccessModifier MaxRestrictionAccessModifier(AccessModifier accessModifier1, AccessModifier accessModifier2)
         {
             if (accessModifier1 == AccessModifier.Private || accessModifier2 == AccessModifier.Private)
@@ -575,6 +585,8 @@ namespace ConsoleApplication1.CSharp
         public Optional<AccessModifier> SetAccessModifier { get; set; }
 
         public bool IsStatic { get; set; }
+
+        public bool IsVirtual { get; set; }
     }
 
     public class ComplexPropertyDescription
@@ -592,6 +604,8 @@ namespace ConsoleApplication1.CSharp
         public List<string> GetStatements { get; set; }
 
         public List<string> SetStatements { get; set; }
+
+        public bool IsVirtual { get; set; }
     }
 
     public enum AccessModifier
@@ -961,8 +975,9 @@ public enum " + typeName;
         {
             string propertyBackingFieldName = simplePropertyDescription.PropertyName.ToLowerFirstChar();
             string optionalStaticModifier = simplePropertyDescription.IsStatic ? "static " : "";
+            string optionalFinalModifier = simplePropertyDescription.IsVirtual ? "" : "final ";
             string backingField = 
-                "private " + optionalStaticModifier 
+                "private " + optionalStaticModifier + optionalFinalModifier
                 + simplePropertyDescription.PropertyType.Text + " " + propertyBackingFieldName + ";\n";
             
             var property = new SourceCode
@@ -982,6 +997,7 @@ public enum " + typeName;
                     simplePropertyDescription.GetAccessModifier.Value,
                     new List<Var>(), getterStatements,
                     simplePropertyDescription.IsStatic,
+                    simplePropertyDescription.IsVirtual,
                     semanticModel);
                 property.MainPart += getter.MainPart + "\n";
             }
@@ -1002,6 +1018,7 @@ public enum " + typeName;
                     simplePropertyDescription.SetAccessModifier.Value,
                     setterArgs, setterStatements,
                     simplePropertyDescription.IsStatic, 
+                    simplePropertyDescription.IsVirtual,
                     semanticModel);
                 property.MainPart += setter.MainPart + "\n";
             }
@@ -1030,6 +1047,7 @@ public enum " + typeName;
                     complexPropertyDescription.GetAccessModifier.Value,
                     new List<Var>(), getterStatements,
                     complexPropertyDescription.IsStatic,
+                    complexPropertyDescription.IsVirtual,
                     semanticModel);
                 property.MainPart += getter.MainPart + "\n";
             }
@@ -1046,6 +1064,7 @@ public enum " + typeName;
                     complexPropertyDescription.SetAccessModifier.Value,
                     setterArgs, setterStatements,
                     complexPropertyDescription.IsStatic,
+                    complexPropertyDescription.IsVirtual,
                     semanticModel);
                 property.MainPart += setter.MainPart + "\n";
             }
@@ -1077,13 +1096,17 @@ public enum " + typeName;
     {
         public SourceCode Generate(string name, TypeReference returnType, List<string> typeParameters, 
             AccessModifier accessModifier, IEnumerable<Var> args, 
-            Optional<List<string>> body, bool isStatic, SemanticModel semanticModel)
+            Optional<List<string>> body, bool isStatic, bool isVirtual,  SemanticModel semanticModel)
         {
             string jname = name.ToLowerFirstChar();
             string jAccessModifier = accessModifier == AccessModifier.Public ? "public" : "private";
             if (isStatic)
             {
                 jAccessModifier += " static";
+            }
+            if (!isVirtual)
+            {
+                jAccessModifier += " final";
             }
 
             var jTypeParametersSb = new StringBuilder();
@@ -1147,7 +1170,7 @@ public enum " + typeName;
     {
         SourceCode Generate(string name, TypeReference returnType, List<string> typeParameters, 
             AccessModifier accessModifier, IEnumerable<Var> args, 
-            Optional<List<string>> body, bool isStatic, SemanticModel semanticModel);
+            Optional<List<string>> body, bool isStatic, bool isVirtual, SemanticModel semanticModel);
     }
 
     public interface IConstructorGenerator
@@ -1525,7 +1548,7 @@ public enum " + typeName;
         {
             string method = MethodGenerator.Generate("invoke", returnType, new List<string>(), 
                 AccessModifier.Public, generatedParameters, statements,
-                false,
+                false, false,
                 semanticModel).MainPart;
             string generatedExpression = string.Format(@"new {0}() {{
                 @Override
