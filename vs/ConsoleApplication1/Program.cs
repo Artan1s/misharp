@@ -58,8 +58,15 @@ namespace ConsoleApplication1
             //local
             //(new JavaGenerator()).Generate(cpDirPath,
             //    @"C:\Users\Mikhail\ConsuloProjects\xcross\src");
+
+            var crossAssemblyPath = @"C:\Users\Misha\OneDrive\Work\30.10.2015\ConsoleApplication2\bin\Debug\ConsoleApplication2.exe";
+            
+            var assembliesPaths = new List<string>();
+            assembliesPaths.Add(crossAssemblyPath);
+
             (new JavaGenerator()).Generate(cpDirPath,
-                @"D:\Android\j2objc\j2objctest3\xcross\src\main\java");
+                @"D:\Android\j2objc\j2objctest3\xcross\src\main\java",
+                assembliesPaths);
 
             //belqi
 //            (new JavaGenerator()).Generate("D:\\WindowsPhone\\Belqi\\Belqi\\PaymentSystemCore\\BuisnessEntities",

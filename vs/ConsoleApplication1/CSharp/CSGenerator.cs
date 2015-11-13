@@ -140,7 +140,7 @@ namespace ConsoleApplication1.CSharp
 
         protected abstract IGenericTypeReferenceBuilder GenericTypeReferenceBuilder { get; }
 
-        public void Generate(string projectPath, string outputPath)
+        public void Generate(string projectPath, string outputPath, List<string> assembliesPaths)
         {
             var collector = new CSharpProjectSourcesCollector();
             var sources = collector.CollectProjectSources(projectPath);
@@ -152,10 +152,10 @@ namespace ConsoleApplication1.CSharp
                 }
                 Directory.CreateDirectory(outputPath);
             }
-            Generate(sources, outputPath);
+            Generate(sources, outputPath, assembliesPaths);
         }
 
-        private void Generate(IEnumerable<SourceFile> sources, string outputPath)
+        private void Generate(IEnumerable<SourceFile> sources, string outputPath, List<string> assembliesPaths)
         {
             var syntaxTrees = new List<SyntaxTree>();
             foreach (var source in sources)
@@ -167,11 +167,12 @@ namespace ConsoleApplication1.CSharp
             }
 
             var mscorlib = MetadataReference.CreateFromFile((typeof(object).Assembly.Location));
-            var systemCore = MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location);
+            var systemCore = MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location);                       
 
             CSharpCompilation compilation = CSharpCompilation.Create("App")
                 .AddSyntaxTrees(syntaxTrees)
-                .AddReferences(mscorlib, systemCore);
+                .AddReferences(mscorlib, systemCore)
+                .AddReferences(assembliesPaths.Select(assemblyPath => MetadataReference.CreateFromFile(assemblyPath)));
 
             foreach (var syntaxTree in syntaxTrees)
             {
@@ -208,7 +209,7 @@ namespace ConsoleApplication1.CSharp
             var typeReferences = new HashSet<string>();
 
             var propertyDeclarations = interfaceDeclaration.DescendantNodes().OfType<PropertyDeclarationSyntax>();
-            var generatedProperties = GetProperties(semanticModel, typeReferences, propertyDeclarations);
+            var generatedProperties = GetProperties(semanticModel, typeReferences, propertyDeclarations, true);
 
             var methodDeclarations = interfaceDeclaration.DescendantNodes().OfType<MethodDeclarationSyntax>();
             var generatedMethods = GetMethods(semanticModel, typeReferences, methodDeclarations);
@@ -258,7 +259,7 @@ namespace ConsoleApplication1.CSharp
             var typeReferences = new HashSet<string>();
 
             var propertyDeclarations = classDeclaration.DescendantNodes().OfType<PropertyDeclarationSyntax>();
-            var generatedProperties = GetProperties(semanticModel, typeReferences, propertyDeclarations);
+            var generatedProperties = GetProperties(semanticModel, typeReferences, propertyDeclarations, false);
 
             var fieldsDeclarations = classDeclaration.DescendantNodes().OfType<FieldDeclarationSyntax>();
             var generatedFields = GetFields(semanticModel, typeReferences, fieldsDeclarations);
@@ -329,8 +330,7 @@ namespace ConsoleApplication1.CSharp
 
                 }
                 var accessModifier = GetAccessModifier(methodDeclaration.Modifiers.ToList());
-                bool isStatic = HasStaticModifier(methodDeclaration.Modifiers.ToList());
-                bool isVirtual = HasVirtualModifier(methodDeclaration.Modifiers.ToList());
+                bool isStatic = HasStaticModifier(methodDeclaration.Modifiers.ToList());                
                 Optional<List<string>> body;
                 if (methodDeclaration.Body == null)
                 {
@@ -347,6 +347,8 @@ namespace ConsoleApplication1.CSharp
                     }
                     body = new Optional<List<string>>(statements);
                 }
+
+                bool isVirtual = !body.HasValue || HasVirtualModifier(methodDeclaration.Modifiers.ToList());
                 
                 var generatedMethod = MethodGenerator.Generate(identifier, 
                     returnTypeReference, 
@@ -395,7 +397,7 @@ namespace ConsoleApplication1.CSharp
         }
 
         private SourceCode GetProperties(SemanticModel semanticModel, HashSet<string> typeReferences, 
-            IEnumerable<PropertyDeclarationSyntax> propertyDeclarations)
+            IEnumerable<PropertyDeclarationSyntax> propertyDeclarations, bool isFromInterface)
         {
             var generatedProperties = new SourceCode { MainPart = "" };
             foreach (var propertyDeclaration in propertyDeclarations)
@@ -409,7 +411,7 @@ namespace ConsoleApplication1.CSharp
                 }
 
                 bool isStatic = HasStaticModifier(propertyDeclaration.Modifiers.ToList());
-                bool isVirtual = HasVirtualModifier(propertyDeclaration.Modifiers.ToList());
+                bool isVirtual = isFromInterface || HasVirtualModifier(propertyDeclaration.Modifiers.ToList());
 
                 var propertyAccessModifier = GetAccessModifier(propertyDeclaration.Modifiers.ToList());
                 var accessors = propertyDeclaration.AccessorList.Accessors;
@@ -472,7 +474,8 @@ namespace ConsoleApplication1.CSharp
                         GetAccessModifier = new Optional<AccessModifier>(),
                         SetAccessModifier = new Optional<AccessModifier>(),
                         IsStatic = isStatic,
-                        IsVirtual = isVirtual
+                        IsVirtual = isVirtual,
+                        IsFromInterface = isFromInterface
                     };
                     if (getAccessor != null)
                     {
@@ -487,7 +490,8 @@ namespace ConsoleApplication1.CSharp
                         simplePropertyDescription.SetAccessModifier = setModifier;
                     }
 
-                    SourceCode generatedProperty = PropertyGenerator.GenerateSimpleProperty(simplePropertyDescription, semanticModel);
+                    SourceCode generatedProperty = PropertyGenerator
+                        .GenerateSimpleProperty(simplePropertyDescription, semanticModel, isFromInterface);
                     generatedProperties.MainPart += "\n" + generatedProperty.MainPart;
                 }
 
@@ -587,6 +591,8 @@ namespace ConsoleApplication1.CSharp
         public bool IsStatic { get; set; }
 
         public bool IsVirtual { get; set; }
+
+        public bool IsFromInterface { get; set; }
     }
 
     public class ComplexPropertyDescription
@@ -971,25 +977,44 @@ public enum " + typeName;
         protected ITypeReferenceBuilder TypeReferenceBuilder { get{return new JavaTypeReferenceBuilder();} }
 
         public SourceCode GenerateSimpleProperty(SimplePropertyDescription simplePropertyDescription,
-            SemanticModel semanticModel)
+            SemanticModel semanticModel, bool isFromInterface)
         {
             string propertyBackingFieldName = simplePropertyDescription.PropertyName.ToLowerFirstChar();
             string optionalStaticModifier = simplePropertyDescription.IsStatic ? "static " : "";
-            string optionalFinalModifier = simplePropertyDescription.IsVirtual ? "" : "final ";
             string backingField = 
-                "private " + optionalStaticModifier + optionalFinalModifier
+                "private " + optionalStaticModifier
                 + simplePropertyDescription.PropertyType.Text + " " + propertyBackingFieldName + ";\n";
+
+            SourceCode property;
+            if (isFromInterface)
+            {
+                property = new SourceCode
+                {
+                    MainPart = ""
+                };
+            }
+            else
+            {
+                property = new SourceCode
+                {
+                    MainPart = backingField + "\n"
+                };    
+            }
             
-            var property = new SourceCode
-                           {
-                               MainPart = backingField + "\n"
-                           };
             if (simplePropertyDescription.GetAccessModifier.HasValue)
             {
-                var getterStatements = new List<string>
+                Optional<List<string>> getterStatements;
+                if (isFromInterface)
                 {
-                    "return " + propertyBackingFieldName + ";"
-                };
+                    getterStatements = new Optional<List<string>>();
+                }
+                else
+                {
+                    getterStatements = new List<string>
+                    {
+                        "return " + propertyBackingFieldName + ";"
+                    };
+                }
                 string name = GenerateGetterMethodName(simplePropertyDescription.PropertyType, simplePropertyDescription.PropertyName);
                 var getter = MethodGenerator.Generate(
                     name, simplePropertyDescription.PropertyType, 
@@ -1003,11 +1028,21 @@ public enum " + typeName;
             }
             if (simplePropertyDescription.SetAccessModifier.HasValue)
             {
-                string fieldAccessor = simplePropertyDescription.IsStatic ? "" : "this.";
-                var setterStatements = new List<string>
+                Optional<List<string>> setterStatements;
+                if (isFromInterface)
                 {
-                    fieldAccessor + propertyBackingFieldName + " = " + "value" + ";"
-                };
+                    setterStatements = new Optional<List<string>>();
+                }
+                else
+                {
+                    string fieldAccessor = simplePropertyDescription.IsStatic ? "" : "this.";
+                    setterStatements = new List<string>
+                    {
+                        fieldAccessor + propertyBackingFieldName + " = " + "value" + ";"
+                    };
+                }
+                
+
                 var setterArgs = new List<Var>
                 {
                     new Var{Name = "value", Type = simplePropertyDescription.PropertyType}
@@ -1087,7 +1122,7 @@ public enum " + typeName;
     public interface IPropertyGenerator
     {
         SourceCode GenerateSimpleProperty(SimplePropertyDescription simplePropertyDescription,
-            SemanticModel semanticModel);
+            SemanticModel semanticModel, bool isFromInterface);
 
         SourceCode GenerateComplexProperty(ComplexPropertyDescription complexPropertyDescription, SemanticModel semanticModel);
     }
