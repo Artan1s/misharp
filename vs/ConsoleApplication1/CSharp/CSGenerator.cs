@@ -1395,6 +1395,10 @@ public enum " + typeName;
 
         private void AssertOperandIsChangeble(ExpressionSyntax expressionSyntax)
         {
+            if (expressionSyntax is LiteralExpressionSyntax)
+            {
+                return;
+            }
             var identifierNameSyntax = expressionSyntax as IdentifierNameSyntax;
             if (identifierNameSyntax == null)
             {
@@ -1870,6 +1874,10 @@ public enum " + typeName;
             {
                 return GenerateForEachStatement((statement as ForEachStatementSyntax), semanticModel);
             }
+            if (statement is WhileStatementSyntax)
+            {
+                return GenerateWhileStatement((statement as WhileStatementSyntax), semanticModel);
+            }
             if (statement is LocalDeclarationStatementSyntax)
             {
                 return GenerateLocalDeclaration((statement as LocalDeclarationStatementSyntax), semanticModel) + ";";
@@ -1897,6 +1905,32 @@ public enum " + typeName;
             throw new NotImplementedException();
         }
 
+        private string GenerateWhileStatement(WhileStatementSyntax whileStatementSyntax, SemanticModel semanticModel)
+        {
+            string condition = ExpressionGenerator.GenerateExpression(whileStatementSyntax.Condition, semanticModel);
+
+            string jStatements;
+            if (!(whileStatementSyntax.Statement is BlockSyntax))
+            {
+                jStatements = Generate(whileStatementSyntax.Statement, semanticModel);
+            }
+            else
+            {
+                jStatements = GenerateBlock(whileStatementSyntax.Statement as BlockSyntax, semanticModel);
+            }
+
+            string whileStatement = "while (" + condition + ") {";
+            if (!string.IsNullOrEmpty(jStatements))
+            {
+                whileStatement += "\n";
+            }
+            whileStatement += jStatements.AddTab();
+
+            whileStatement += "\n}";
+
+            return whileStatement;
+        }
+
         private string GenerateForEachStatement(ForEachStatementSyntax forEachStatementSyntax, SemanticModel semanticModel)
         {
             string variable = forEachStatementSyntax.Identifier.ValueText;
@@ -1917,7 +1951,15 @@ public enum " + typeName;
                 throw new NotImplementedException();
             }
             string iterable = ExpressionGenerator.GenerateExpression(forEachStatementSyntax.Expression, semanticModel);
-            string jStatements = GenerateBlock(forEachStatementSyntax.Statement as BlockSyntax, semanticModel);
+            string jStatements;
+            if (!(forEachStatementSyntax.Statement is BlockSyntax))
+            {
+                jStatements = Generate(forEachStatementSyntax.Statement, semanticModel);
+            }
+            else
+            {
+                jStatements = GenerateBlock(forEachStatementSyntax.Statement as BlockSyntax, semanticModel);
+            }
             return "for (" + variableTypeText + " " + variable + " : " + iterable + ") {\n"
                 + "    " + jStatements + "\n"
                 + "}";
@@ -2003,7 +2045,7 @@ public enum " + typeName;
             string valueExpression = ExpressionGenerator.GenerateExpression(declarationVariable.Initializer.Value, semanticModel);
             string generatedDeclaration =  generatedDeclarationType + " " + variableName + " = " + valueExpression;
 
-            if (!variableName.StartsWith("val"))
+            if (!variableName.StartsWith("___"))
             {
                 generatedDeclaration = "final " + generatedDeclaration;
             }
