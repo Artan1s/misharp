@@ -1566,7 +1566,7 @@ public enum " + typeName;
                 string statement = generatedInvocationExpression + ";";
                 if (!Equals(returnType, JavaTypeReferences.Void))
                 {
-                    statement += "return ";
+                    statement = "return " + statement;
                 }
                 statements.Add(statement);
             }
@@ -1718,7 +1718,7 @@ public enum " + typeName;
                 var generatedParameters = new List<Var>();
                 if (delegateInfo.IsFunc)
                 {
-                    delegateTypeParameters.RemoveAt(0);
+                    delegateTypeParameters.RemoveAt(delegateTypeParameters.Count - 1);
                 }
                 for (int i = 0; i < delegateTypeParameters.Count; i++)
                 {
