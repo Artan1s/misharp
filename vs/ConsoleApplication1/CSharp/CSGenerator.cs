@@ -1269,10 +1269,13 @@ public enum " + typeName;
         public string Generate(ArgumentListSyntax argumentListSyntax, SemanticModel semanticModel)
         {
             var parameterExpressions = new List<string>();
-            foreach (var argument in argumentListSyntax.Arguments)
+            if (argumentListSyntax != null)
             {
-                string parameterExpression = ExpressionGenerator.GenerateExpression(argument.Expression, semanticModel);
-                parameterExpressions.Add(parameterExpression);
+                foreach (var argument in argumentListSyntax.Arguments)
+                {
+                    string parameterExpression = ExpressionGenerator.GenerateExpression(argument.Expression, semanticModel);
+                    parameterExpressions.Add(parameterExpression);
+                }
             }
             string argumentList = "(";
             if (parameterExpressions.Count == 0)
@@ -1482,7 +1485,49 @@ public enum " + typeName;
             }
             string typeReference = TypeReferenceGenerator.GenerateTypeReference(type, semanticModel).Text;
             string argumentList = ArgumentListGenerator.Generate(objectCreationExpressionSyntax.ArgumentList, semanticModel);
-            return "new " + typeReference + argumentList;
+            string constructorCall = "new " + typeReference + argumentList;
+
+            var initializer = objectCreationExpressionSyntax.Initializer;
+            if (initializer == null || !initializer.Expressions.Any())
+            {
+                return constructorCall;
+            }
+            else
+            {
+                string objectToCreateName = "temp";
+
+                string initializations = "";
+
+                var expressions = objectCreationExpressionSyntax.Initializer.Expressions;
+                foreach (var expressionSyntax in expressions)
+                {
+                    if (expressionSyntax is AssignmentExpressionSyntax)
+                    {
+                        var assignmentExpressionSyntax = expressionSyntax as AssignmentExpressionSyntax;
+                        //string left = objectToCreateName + "." + GenerateExpression(assignmentExpressionSyntax.Left, semanticModel);
+                        string expressionString = GenerateAssignmentExpression(assignmentExpressionSyntax, semanticModel);
+                        initializations += objectToCreateName + "." + expressionString + ";\n";
+                    }
+                    else
+                    {
+                        //string left = objectToCreateName + "." + GenerateExpression(assignmentExpressionSyntax.Left, semanticModel);
+                        string expressionString = GenerateExpression(expressionSyntax, semanticModel);
+                        initializations += objectToCreateName + ".add(" + expressionString + ");\n";
+                    }
+                }
+
+                string creationStatements = typeReference + " " + objectToCreateName + " = " + constructorCall + ";\n" +
+                                            initializations + 
+                                            "return " + objectToCreateName + ";\n";
+
+                string constructAndInitialize = "((new by.besmart.cross.delegates.Func() {\n" + 
+                        "\t\tpublic " + typeReference + " invoke() {\n" +
+                                creationStatements.AddTab(3) +
+                            "}\n" + 
+                        "\t}).invoke())";
+            
+                return constructAndInitialize;
+            }
         }
 
         private string GenerateExceptionCreationExpression(ObjectCreationExpressionSyntax exceptionCreationExpressionSyntax, SemanticModel semanticModel)

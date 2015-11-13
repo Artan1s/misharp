@@ -29,15 +29,15 @@ namespace ConsoleApplication1.CSharp
             }
             if (literal.IsKind(SyntaxKind.NumericLiteralExpression))
             {
-                return literal.GetText().ToString();
+                return literal.ToString();
             }
             if (literal.IsKind(SyntaxKind.StringLiteralExpression))
             {
-                return literal.GetText().ToString();
+                return literal.ToString();
             }
             if (literal.IsKind(SyntaxKind.CharacterLiteralExpression))
             {
-                return literal.GetText().ToString();
+                return literal.ToString();
             }
             throw new NotImplementedException();
         }
