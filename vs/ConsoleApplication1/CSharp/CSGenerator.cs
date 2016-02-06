@@ -270,9 +270,10 @@ namespace ConsoleApplication1.CSharp
             var methodDeclarations = classDeclaration.DescendantNodes().OfType<MethodDeclarationSyntax>();
             var generatedMethods = GetMethods(semanticModel, typeReferences, methodDeclarations);
 
-            var classSourceCode = TypeBuilder.BuildType(semanticModel, 
+            var classSourceCode = TypeBuilder.BuildType(semanticModel,
                 fullyQualifiedNameParts, genericTypeParameters,
                 typeInfo.BaseType,
+                typeInfo.AllInterfaces,
                 generatedConstructors,
                 generatedFields,
                 generatedProperties,
@@ -621,12 +622,13 @@ namespace ConsoleApplication1.CSharp
 
     public interface ITypeBuilder
     {
-        SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts, 
-            IEnumerable<ITypeParameterSymbol> genericParameters, 
-            INamedTypeSymbol baseType, 
-            SourceCode generatedConstructors, 
+        SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts,
+            IEnumerable<ITypeParameterSymbol> genericParameters,
+            INamedTypeSymbol baseType,
+            IEnumerable<INamedTypeSymbol> allInterfaces,
+            SourceCode generatedConstructors,
             SourceCode fields,
-            SourceCode properties, 
+            SourceCode properties,
             SourceCode methods);
 
         SourceCode BuildInterface(SemanticModel semanticModel, string[] fullyQualifiedNameParts,
@@ -641,10 +643,12 @@ namespace ConsoleApplication1.CSharp
     {
         protected JavaTypeReferenceGenerator TypeReferenceGenerator { get { return new JavaTypeReferenceGenerator(); } }
 
-        public SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts, IEnumerable<ITypeParameterSymbol> genericParameters, 
-            INamedTypeSymbol baseType, 
+        public SourceCode BuildType(SemanticModel semanticModel, string[] fullyQualifiedNameParts,
+            IEnumerable<ITypeParameterSymbol> genericParameters,
+            INamedTypeSymbol baseType,
+            IEnumerable<INamedTypeSymbol> allInterfaces,
             SourceCode constructors,
-            SourceCode fields, 
+            SourceCode fields,
             SourceCode properties,
             SourceCode methods)
         {
@@ -668,6 +672,19 @@ namespace ConsoleApplication1.CSharp
                 baseTypeReferenceText = TypeReferenceGenerator.GenerateTypeReference(baseType, semanticModel).Text;
             }
 
+            string interfacesDeclaration = "";
+
+            if (allInterfaces.Any())
+            {
+                var interfaceReferenceTexts = new List<string>();
+                foreach (var interfaceNamedTypeSymbol in allInterfaces)
+                {
+                    interfaceReferenceTexts.Add(
+                        TypeReferenceGenerator.GenerateTypeReference(interfaceNamedTypeSymbol, semanticModel).Text);
+                }
+                interfacesDeclaration = " implements " + String.Join(", ", interfaceReferenceTexts.ToArray());
+            }
+
             string code =
 @"package " + packageName + @";
 
@@ -676,6 +693,7 @@ public class " + typeName + generic;
             {
                 code += " extends " + baseTypeReferenceText;
             }
+            code += interfacesDeclaration;
             code += " {\n";
             code += fields.MainPart.AddTab() + "\n";
             code += constructors.MainPart.AddTab() + "\n";
@@ -683,9 +701,9 @@ public class " + typeName + generic;
             code += methods.MainPart.AddTab();
             code += "\n}";
             return new SourceCode
-                   {
-                       MainPart = code
-                   };
+            {
+                MainPart = code
+            };
         }
 
         public SourceCode BuildInterface(SemanticModel semanticModel, string[] fullyQualifiedNameParts, 

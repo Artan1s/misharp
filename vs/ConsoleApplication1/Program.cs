@@ -60,12 +60,16 @@ namespace ConsoleApplication1
             //    @"C:\Users\Mikhail\ConsuloProjects\xcross\src");
 
             var crossAssemblyPath = @"C:\Users\Misha\OneDrive\Work\30.10.2015\ConsoleApplication2\bin\Debug\ConsoleApplication2.exe";
-            
-            var assembliesPaths = new List<string>();
-            assembliesPaths.Add(crossAssemblyPath);
 
-            (new JavaGenerator()).Generate(cpDirPath,
-                @"D:\Android\j2objc\j2objctest3\shared\src\main\java",
+            var assembliesPaths = new List<string>();
+            //assembliesPaths.Add(crossAssemblyPath);
+
+            //            (new JavaGenerator()).Generate(cpDirPath,
+            //                @"D:\Android\j2objc\j2objctest3\shared\src\main\java",
+            //                assembliesPaths);
+
+            (new JavaGenerator()).Generate(@"D:\misharp_examples\TipCalc\TipCalc.Core",
+                @"D:\misharp_examples\TipCalc\TipCalc.Droid\TipCalc\app\src\shared\java",
                 assembliesPaths);
 
             //belqi
@@ -116,14 +120,14 @@ var a = new StringUtils();
 
 
 
-            SyntaxTree tree = CSharpSyntaxTree.ParseText(text);
-            var root = (CompilationUnitSyntax)tree.GetRoot();
-
-            var comp = CSharpCompilation.Create("App").AddSyntaxTrees(clientCodeTree, tree);
-
-            semanticModel = comp.GetSemanticModel(clientCodeTree);
-
-            ObjCCodeGenerator.semanticModel = semanticModel;
+//            SyntaxTree tree = CSharpSyntaxTree.ParseText(text);
+//            var root = (CompilationUnitSyntax)tree.GetRoot();
+//
+//            var comp = CSharpCompilation.Create("App").AddSyntaxTrees(clientCodeTree, tree);
+//
+//            semanticModel = comp.GetSemanticModel(clientCodeTree);
+//
+//            ObjCCodeGenerator.semanticModel = semanticModel;
 
 
 //            var namespaceDeclaration = root.Members.OfType<NamespaceDeclarationSyntax>().First();
