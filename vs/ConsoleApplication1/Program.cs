@@ -15,11 +15,7 @@ using NuGet;
 
 namespace ConsoleApplication1
 {
-    public class Var
-    {
-        public string Name { get; set; }
-        public TypeReference Type { get; set; }
-    }
+    
     class Program
     {
         private static SemanticModel semanticModel;
